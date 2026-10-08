@@ -35,6 +35,10 @@ class TestToYfinanceSymbolCrypto:
     def test_us_suffix_stripped(self) -> None:
         assert _to_yfinance_symbol("AAPL.US") == "AAPL"
 
+    def test_a_share_shanghai_to_ss(self) -> None:
+        assert _to_yfinance_symbol("600519.SH") == "600519.SS"
+        assert _to_yfinance_symbol("000001.SZ") == "000001.SZ"
+
     def test_whitespace_stripped(self) -> None:
         assert _to_yfinance_symbol("  BTC-USDT  ") == "BTC-USD"
 

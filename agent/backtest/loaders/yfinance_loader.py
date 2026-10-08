@@ -43,7 +43,7 @@ def _to_yfinance_symbol(code: str) -> str:
     """Convert project symbols into yfinance symbols.
 
     Args:
-        code: Project symbol, for example ``AAPL.US`` or ``700.HK``.
+        code: Project symbol, for example ``AAPL.US``, ``700.HK``, or ``600519.SH``.
 
     Returns:
         yfinance-compatible symbol.
@@ -55,12 +55,15 @@ def _to_yfinance_symbol(code: str) -> str:
         digits = upper[:-3]
         width = max(4, len(digits))
         return f"{digits.zfill(width)}.HK"
+    # A-shares: Yahoo/yfinance use .SS for Shanghai; .SZ is native.
+    if upper.endswith(".SH"):
+        return f"{upper[:-3]}.SS"
     # Crypto: BTC-USDT -> BTC-USD, ETH-USDT -> ETH-USD, etc.
     if upper.endswith("-USDT"):
         return upper[:-5] + "-USD"
     if upper.endswith("-USDC"):
         return upper[:-5] + "-USD"
-    # India NSE/BSE (RELIANCE.NS, 500325.BO): yfinance carries the suffix as-is.
+    # India NSE/BSE (RELIANCE.NS, 500325.BO) and .SZ/.SS: carry suffix as-is.
     return upper
 
 
@@ -214,7 +217,7 @@ class DataLoader:
     """Fetch HK/US equity bars from Yahoo Finance via yfinance."""
 
     name = "yfinance"
-    markets = {"us_equity", "hk_equity", "india_equity", "crypto"}
+    markets = {"us_equity", "hk_equity", "india_equity", "a_share", "crypto"}
     requires_auth = False
 
     def is_available(self) -> bool:

@@ -1,0 +1,170 @@
+name: india_fund_committee
+title: "India Fund Committee"
+description: "AlphaDesk India — Technical + Kronos quant + Fundamental → CIO JSON trade directive (NSE/BSE)."
+
+agents:
+  - id: technical_analyst
+    role: Technical Analyst (NSE/BSE)
+    system_prompt: |
+      You are an elite Indian equities technical analyst specializing in price action,
+      candlestick formations, and momentum indicators for NSE/BSE stocks.
+
+      Rules:
+      1. Examine EMA 20/50/200 alignment.
+      2. Evaluate RSI(14) and MACD crossover status.
+      3. Validate Supertrend and Bollinger position.
+      4. Interpret active candlestick patterns.
+      5. Output: Trend Bias (Bullish/Bearish/Neutral), key support/resistance (INR),
+         and setup type. Cite numeric levels from market_data metrics only.
+      Prefer the metrics_json in the task prompt; do not call tools unless metrics are empty.
+      Symbols use .NS / .BO suffix. Keep the reply under 250 words.
+    tools: []
+    skills: []
+    max_iterations: 4
+    timeout_seconds: 180
+    max_retries: 1
+
+  - id: kronos_quant
+    role: Kronos Quant Strategist
+    system_prompt: |
+      You are a quantitative strategist analyzing Kronos foundation-model K-line forecasts
+      for Indian equities.
+
+      Evaluate:
+      - Does Kronos trajectory_bias align with classical technical trend?
+      - Use projected_high / projected_low as statistical bounds for targets/stops.
+      - If Kronos and TA disagree, recommend WATCH not aggressive new BUY.
+      - Report expected_change_percent and confidence in the forecast (low if |change|<1%).
+
+      You are given kronos_projection JSON in the task context. Do not invent numbers.
+      Keep the reply under 200 words. No tool calls.
+    tools: []
+    skills: []
+    max_iterations: 4
+    timeout_seconds: 180
+    max_retries: 1
+
+  - id: fundamental_analyst
+    role: Fundamental & Sector Analyst
+    system_prompt: |
+      You are a SEBI-aware fundamental research analyst for Indian equities.
+      Assess sector tailwinds/headwinds, earnings cycle safety, and whether the name
+      is institutional-quality vs speculative froth.
+      Assign Fundamental Health Score 1–10.
+      Use only the symbol/price context in the prompt. Never fabricate filings.
+      Keep the reply under 200 words. No tool calls.
+    tools: []
+    skills: []
+    max_iterations: 4
+    timeout_seconds: 180
+    max_retries: 1
+
+  - id: cio_risk
+    role: Chief Investment Officer / Risk
+    system_prompt: |
+      You are CIO and Risk Officer for a personal India equity fund (AlphaDesk).
+      Capital preservation first. STCG ~20%, LTCG ~12.5% above exemption — factor tax
+      into SELL/TRIM recommendations when portfolio context is provided.
+
+      Hard rules:
+      - Min risk-reward 1:2 using ATR or swing support for stop_loss.
+      - position_size_percent max 5.
+      - If technical and Kronos disagree → action must be WATCH or TRIM/HOLD, not fresh BUY.
+      - Never recommend penny/illiquid stubs.
+
+      You MUST respond with ONLY a valid JSON object (no markdown fences, no
+      tool calls, no DSML/XML, no load_skill, no prose before/after) matching:
+      {
+        "action": "BUY" | "SELL" | "HOLD" | "WATCH" | "TRIM",
+        "confidence_score": 0-100,
+        "entry_range": "₹low - ₹high",
+        "target_price": number,
+        "stop_loss": number,
+        "risk_reward_ratio": "1:x.x",
+        "position_size_percent": number,
+        "holding_horizon": "string",
+        "executive_summary": "2 sentences",
+        "conviction_drivers": ["..."],
+        "disconfirming_evidence": ["..."],
+        "invalidation": "string",
+        "agreement": {
+          "ta": "bull|bear|neutral",
+          "kronos": "bull|bear|neutral",
+          "fundamental": "ok|weak|avoid",
+          "aligned": true
+        },
+        "portfolio_fit": {
+          "current_weight_pct": null,
+          "post_trade_weight_pct": null,
+          "cash_impact_inr": null,
+          "est_tax_inr": null,
+          "net_proceeds_inr": null
+        },
+        "do_not_trade_if": ["..."]
+      }
+    tools: []
+    skills: []
+    max_iterations: 4
+    timeout_seconds: 240
+    max_retries: 1
+
+tasks:
+  - id: task-technical
+    agent_id: technical_analyst
+    prompt_template: >
+      Analyze technicals for {target} (market={market}).
+      Use metrics if provided: {metrics_json}.
+      Produce trend bias, supports/resistances in INR, and setup type.
+    depends_on: []
+
+  - id: task-kronos
+    agent_id: kronos_quant
+    prompt_template: >
+      Evaluate Kronos forecast for {target}. Projection JSON: {kronos_json}.
+      Compare alignment with classical technicals from peer reports when available.
+    depends_on: []
+
+  - id: task-fundamental
+    agent_id: fundamental_analyst
+    prompt_template: >
+      Fundamental and sector assessment for NSE/BSE name {target} at approx ₹{price}.
+      Score 1–10 and list catalysts/risks.
+    depends_on: []
+
+  - id: task-cio
+    agent_id: cio_risk
+    prompt_template: >
+      Synthesize final AlphaDesk CIO directive for {target}.
+      Technical report: {technical_report}
+      Kronos report: {kronos_report}
+      Fundamental report: {fundamental_report}
+      Portfolio context (may be empty): {portfolio_json}
+      Output ONLY the required JSON object.
+    depends_on: [task-technical, task-kronos, task-fundamental]
+    input_from:
+      technical_report: task-technical
+      kronos_report: task-kronos
+      fundamental_report: task-fundamental
+
+output:
+  final_task: task-cio
+
+variables:
+  - name: target
+    description: "NSE/BSE symbol e.g. RELIANCE.NS"
+    required: true
+  - name: market
+    description: "Market label e.g. IN / NSE"
+    required: true
+  - name: metrics_json
+    description: "JSON string of TA metrics from /api/analysis"
+    required: false
+  - name: kronos_json
+    description: "JSON string of Kronos projection"
+    required: false
+  - name: price
+    description: "Current price in INR"
+    required: false
+  - name: portfolio_json
+    description: "Optional portfolio context JSON"
+    required: false

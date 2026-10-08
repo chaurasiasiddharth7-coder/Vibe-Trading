@@ -68,6 +68,13 @@ class TestMapSymbol:
         assert yahoo_client.map_symbol("BTC-USD") == "BTC-USD"
         assert yahoo_client.map_symbol("^GSPC") == "^GSPC"
 
+    def test_a_share_shanghai_mapped_to_ss(self):
+        assert yahoo_client.map_symbol("600519.SH") == "600519.SS"
+        assert yahoo_client.map_symbol("601398.sh") == "601398.SS"
+
+    def test_a_share_shenzhen_passthrough(self):
+        assert yahoo_client.map_symbol("000001.SZ") == "000001.SZ"
+
 
 # ---------------------------------------------------------------------------
 # get_chart parsing

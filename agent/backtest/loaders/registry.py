@@ -132,7 +132,19 @@ _NO_NETWORK_FALLBACK_SOURCES: frozenset[str] = frozenset({"local", "qveris"})  #
 # that must be politely throttled; Finnhub/AlphaVantage/Tiingo/FMP are key-gated
 # REST fallbacks placed deeper in the chain.
 FALLBACK_CHAINS: dict[str, list[str]] = {
-    "a_share":   ["tencent", "mootdx", "eastmoney", "baostock", "akshare", "tushare", "local"],
+    # A-shares: prefer TCP/Yahoo (reliable on corp SSL) before Tencent/mootdx.
+    # Yahoo/yfinance accept .SZ/.SH (mapped to .SS for Shanghai).
+    "a_share": [
+        "baostock",
+        "yahoo",
+        "yfinance",
+        "eastmoney",
+        "akshare",
+        "tushare",
+        "tencent",
+        "mootdx",
+        "local",
+    ],
     "us_equity": ["yahoo", "stooq", "sina", "eastmoney", "yfinance", "tiingo", "fmp", "finnhub", "alphavantage", "longbridge", "akshare", "local"],
     "hk_equity": ["eastmoney", "yahoo", "futu", "yfinance", "akshare", "longbridge", "local"],
     "india_equity": ["yahoo", "yfinance", "india_broker", "local"],
@@ -183,6 +195,70 @@ def resolve_loader(market: str) -> Any:
         f"No available data source for market '{market}'. "
         f"Tried: {tried or chain}. Check network and API token config."
     )
+
+
+def safe_fetch(
+    loader: Any,
+    codes: list[str],
+    start_date: str,
+    end_date: str,
+    *,
+    interval: str = "1D",
+    fields: Any = None,
+) -> dict[str, Any]:
+    """Call ``loader.fetch``; on any exception return ``{}`` (never raise)."""
+    name = getattr(loader, "name", type(loader).__name__)
+    try:
+        kwargs: dict[str, Any] = {"interval": interval}
+        if fields is not None:
+            kwargs["fields"] = fields
+        result = loader.fetch(codes, start_date, end_date, **kwargs)
+        return result if isinstance(result, dict) else {}
+    except Exception as exc:
+        logger.warning("loader %s fetch failed: %s", name, exc)
+        return {}
+
+
+def fetch_chain(
+    market: str,
+    codes: list[str],
+    start_date: str,
+    end_date: str,
+    *,
+    interval: str = "1D",
+    fields: Any = None,
+    prefer: str | None = None,
+) -> tuple[dict[str, Any], str]:
+    """Walk the market fallback chain until a non-empty fetch succeeds.
+
+    Returns ``(data_map, source_name)``. Empty map + ``""`` if all fail.
+    """
+    _ensure_registered()
+    chain = list(FALLBACK_CHAINS.get(market, []))
+    if prefer and prefer in LOADER_REGISTRY:
+        chain = [prefer] + [n for n in chain if n != prefer]
+
+    last_name = ""
+    for name in chain:
+        if name not in LOADER_REGISTRY:
+            continue
+        try:
+            loader = LOADER_REGISTRY[name]()
+        except Exception as exc:
+            logger.debug("loader %s failed to construct: %s", name, exc)
+            continue
+        if not loader.is_available():
+            continue
+        last_name = name
+        result = safe_fetch(
+            loader, codes, start_date, end_date, interval=interval, fields=fields
+        )
+        if result:
+            if name != (prefer or ""):
+                logger.info("data chain: %s served %s (%d symbols)", name, market, len(result))
+            return result, name
+        logger.info("data chain: %s empty/failed for %s — trying next", name, market)
+    return {}, last_name
 
 
 def get_loader_cls_with_fallback(source: str) -> Type[Any]:

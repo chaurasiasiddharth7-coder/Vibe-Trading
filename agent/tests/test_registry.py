@@ -11,9 +11,11 @@ from backtest.loaders.registry import (
     FALLBACK_CHAINS,
     LOADER_REGISTRY,
     VALID_SOURCES,
+    fetch_chain,
     get_loader_cls_with_fallback,
     register,
     resolve_loader,
+    safe_fetch,
 )
 
 
@@ -148,8 +150,17 @@ class TestFallbackChains:
     def test_chains_ordered_by_ip_ban_risk(self) -> None:
         """Equity chains lead with throttle-tolerant public sources and trail
         with key-gated REST fallbacks, in the exact reviewed order."""
+        # A-shares: baostock/Yahoo before Tencent (corp SSL often hangs on Tencent).
         assert FALLBACK_CHAINS["a_share"] == [
-            "tencent", "mootdx", "eastmoney", "baostock", "akshare", "tushare", "local",
+            "baostock",
+            "yahoo",
+            "yfinance",
+            "eastmoney",
+            "akshare",
+            "tushare",
+            "tencent",
+            "mootdx",
+            "local",
         ]
         assert FALLBACK_CHAINS["us_equity"] == [
             "yahoo", "stooq", "sina", "eastmoney", "yfinance", "tiingo", "fmp",
@@ -328,3 +339,69 @@ class TestInitErrorFallback:
             }):
                 cls = get_loader_cls_with_fallback("fake_init_error")
                 assert cls is _FakeAvailableLoader
+
+
+# ---------------------------------------------------------------------------
+# Exception-aware fetch helpers
+# ---------------------------------------------------------------------------
+
+
+class _RaisingFetchLoader:
+    name = "fake_raising"
+    markets = {"a_share"}
+    requires_auth = False
+
+    def is_available(self) -> bool:
+        return True
+
+    def fetch(self, codes, start_date, end_date, *, interval="1D", fields=None):
+        raise OSError("SSL: CERTIFICATE_VERIFY_FAILED simulated")
+
+
+class _EmptyFetchLoader:
+    name = "fake_empty"
+    markets = {"a_share"}
+    requires_auth = False
+
+    def is_available(self) -> bool:
+        return True
+
+    def fetch(self, codes, start_date, end_date, *, interval="1D", fields=None):
+        return {}
+
+
+class _OkFetchLoader:
+    name = "fake_ok"
+    markets = {"a_share"}
+    requires_auth = False
+
+    def is_available(self) -> bool:
+        return True
+
+    def fetch(self, codes, start_date, end_date, *, interval="1D", fields=None):
+        return {codes[0]: "frame"}
+
+
+class TestSafeFetchAndChain:
+    def test_safe_fetch_swallows_exceptions(self) -> None:
+        assert safe_fetch(_RaisingFetchLoader(), ["600519.SH"], "2024-01-01", "2024-01-31") == {}
+
+    def test_fetch_chain_skips_raising_then_empty(self) -> None:
+        with patch.dict(
+            LOADER_REGISTRY,
+            {
+                "fake_raising": _RaisingFetchLoader,
+                "fake_empty": _EmptyFetchLoader,
+                "fake_ok": _OkFetchLoader,
+            },
+            clear=True,
+        ):
+            with patch.dict(
+                FALLBACK_CHAINS,
+                {"a_share": ["fake_raising", "fake_empty", "fake_ok"]},
+            ):
+                data, source = fetch_chain(
+                    "a_share", ["600519.SH"], "2024-01-01", "2024-01-31"
+                )
+        assert source == "fake_ok"
+        assert "600519.SH" in data

@@ -285,6 +285,27 @@ def test_worker_prompt_data_citation_rule_targets_aggregator_roles() -> None:
     assert "upstream did not provide" in prompt
 
 
+def test_worker_prompt_no_tools_skips_tool_execution_phases() -> None:
+    """Empty tool whitelist must not instruct load_skill / write_file (Desk CIO)."""
+    prompt = build_worker_prompt(_spec(), {}, "(no matching skills)")
+    assert "You have NO tools" in prompt
+    assert "load_skill` first" not in prompt
+    assert "Phase 1 — Plan" not in prompt
+    assert "Do NOT emit tool calls" in prompt
+
+
+def test_worker_prompt_with_tools_keeps_phase_execution() -> None:
+    spec = SwarmAgentSpec(
+        id="data",
+        role="analyst",
+        system_prompt="Fetch data.",
+        tools=["load_skill", "write_file", "bash"],
+    )
+    prompt = build_worker_prompt(spec, {}, "(no matching skills)")
+    assert "Phase 1 — Plan" in prompt
+    assert "load_skill` first" in prompt
+
+
 def test_runtime_threads_grounding_block_into_layer_workers(tmp_path, monkeypatch) -> None:
     """Regression: _execute_layer must receive the run-level grounding block."""
     store = MagicMock()

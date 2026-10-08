@@ -17,10 +17,11 @@ DEFAULT_MAX_ROWS = 250
 # fallback chain (registry.FALLBACK_CHAINS), so an unavailable preferred source
 # still degrades gracefully to the rest of the chain. US/HK equities route to
 # the throttle-tolerant Yahoo public endpoint first (lower IP-ban risk than the
-# yfinance SDK), A-shares to the Tencent quote endpoint.
+# yfinance SDK). A-shares prefer baostock (then Yahoo); Tencent is demoted
+# because corp SSL often hangs on ifzq.gtimg.cn.
 _SOURCE_PATTERNS = [
     (re.compile(r"^local:", re.I), "local"),
-    (re.compile(r"^\d{6}\.(SZ|SH|BJ)$", re.I), "tencent"),
+    (re.compile(r"^\d{6}\.(SZ|SH|BJ)$", re.I), "baostock"),
     (re.compile(r"^[A-Z]+\.US$", re.I), "yahoo"),
     (re.compile(r"^\d{3,5}\.HK$", re.I), "yahoo"),
     # India: NSE (RELIANCE.NS) / BSE (500325.BO). Tickers may carry '&' and '-'

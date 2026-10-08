@@ -16,6 +16,8 @@ Symbol convention (Vibe-Trading -> Yahoo):
   * HK ``00700.HK`` -> ``0700.HK`` (Yahoo drops the leading zero to 4 digits)
   * India ``RELIANCE.NS`` / ``500325.BO`` -> unchanged (Yahoo carries the
     ``.NS``/``.BO`` suffix verbatim)
+  * A-shares ``600519.SH`` -> ``600519.SS`` (Yahoo uses ``.SS`` for Shanghai;
+    ``.SZ`` is already Yahoo-native)
   * Anything else is passed through unchanged (e.g. ``BTC-USD``, ``^GSPC``).
 
 This module is provider-specific glue only; it returns plain Python
@@ -85,6 +87,9 @@ def map_symbol(symbol: str) -> str:
         base = cleaned[: -len(".HK")]
         digits = base.lstrip("0") or "0"
         return f"{digits.zfill(4)}.HK"
+    # Yahoo Shanghai: .SS (project uses Tushare-style .SH)
+    if upper.endswith(".SH"):
+        return f"{cleaned[: -len('.SH')]}.SS"
     return cleaned
 
 

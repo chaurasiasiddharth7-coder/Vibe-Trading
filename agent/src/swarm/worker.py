@@ -243,46 +243,72 @@ def build_worker_prompt(
     # prices and sector weights. This block applies the rule unconditionally
     # — including to aggregator / synthesis agents that have no data tools
     # and previously had no instruction against inventing numbers.
-    prompt_parts.append(
-        "## Data Citation Discipline (HARD RULE)\n\n"
-        "Every specific number you cite in your output — prices, percentages, "
-        "volumes, fund flows, market-cap rankings, sector weights, ETF codes, "
-        "ticker recommendations — MUST be traceable to one of:\n"
-        "  (a) a tool call result obtained in THIS run,\n"
-        "  (b) the Ground Truth block above (if present),\n"
-        "  (c) the Upstream Context above (if present and the upstream agent "
-        "itself sourced it from (a) or (b)).\n\n"
-        "You may NOT cite numbers from memory or training data. Markets have "
-        "moved since your cutoff; any specific price/percentage you recall is "
-        "wrong by default.\n\n"
-        "If you cannot back a number with (a), (b), or (c), you have two "
-        "choices:\n"
-        "  - call a data tool to fetch it (preferred), or\n"
-        "  - omit the number and qualify the statement (e.g. \"directional "
-        "only — not verified against live data\").\n\n"
-        "This rule applies equally to synthesis / aggregator / editor roles "
-        "that lack data tools. If upstream did not provide a specific number, "
-        "do NOT introduce one from training data — say the upstream omitted "
-        "it and proceed without."
-    )
-
-    prompt_parts.append(
-        "## Execution Rules\n\n"
-        "You have a HARD LIMIT of 20 tool calls. After that you will be cut off. Work efficiently.\n\n"
-        "**Phase 1 — Plan (0 tool calls):** Before calling any tool, state your plan in 3-5 bullet points.\n\n"
-        "**Phase 2 — Execute (≤15 tool calls):**\n"
-        "- `load_skill` first to get data access methods and analysis patterns.\n"
-        "- Write ONE focused Python script via `write_file`, then run it with `bash python script.py`.\n"
-        "- Do NOT write long Python code inside bash. Use write_file + bash.\n"
-        "- Do NOT fetch data with curl/requests. Use the patterns from load_skill (yfinance, OKX API via Python).\n"
-        "- If a script fails, read the error, fix with `edit_file`, re-run. Max 2 retries per script.\n\n"
-        "**Phase 3 — Summarize (MUST use write_file):**\n"
-        "- You MUST call `write_file` with path `report.md` to save your final report as a markdown file.\n"
-        "- This is REQUIRED, not optional. Your final response MUST include a write_file call for report.md.\n"
-        "- The report must include specific numbers, dates, and actionable conclusions.\n"
-        "- After writing report.md, output a brief 2-3 sentence summary in your text response.\n"
-        "- Respond in the same language as the task prompt."
-    )
+    has_tools = bool(agent_spec.tools)
+    if has_tools:
+        prompt_parts.append(
+            "## Data Citation Discipline (HARD RULE)\n\n"
+            "Every specific number you cite in your output — prices, percentages, "
+            "volumes, fund flows, market-cap rankings, sector weights, ETF codes, "
+            "ticker recommendations — MUST be traceable to one of:\n"
+            "  (a) a tool call result obtained in THIS run,\n"
+            "  (b) the Ground Truth block above (if present),\n"
+            "  (c) the Upstream Context above (if present and the upstream agent "
+            "itself sourced it from (a) or (b)).\n\n"
+            "You may NOT cite numbers from memory or training data. Markets have "
+            "moved since your cutoff; any specific price/percentage you recall is "
+            "wrong by default.\n\n"
+            "If you cannot back a number with (a), (b), or (c), you have two "
+            "choices:\n"
+            "  - call a data tool to fetch it (preferred), or\n"
+            "  - omit the number and qualify the statement (e.g. \"directional "
+            "only — not verified against live data\").\n\n"
+            "This rule applies equally to synthesis / aggregator / editor roles "
+            "that lack data tools. If upstream did not provide a specific number, "
+            "do NOT introduce one from training data — say the upstream omitted "
+            "it and proceed without."
+        )
+        prompt_parts.append(
+            "## Execution Rules\n\n"
+            "You have a HARD LIMIT of 20 tool calls. After that you will be cut off. Work efficiently.\n\n"
+            "**Phase 1 — Plan (0 tool calls):** Before calling any tool, state your plan in 3-5 bullet points.\n\n"
+            "**Phase 2 — Execute (≤15 tool calls):**\n"
+            "- `load_skill` first to get data access methods and analysis patterns.\n"
+            "- Write ONE focused Python script via `write_file`, then run it with `bash python script.py`.\n"
+            "- Do NOT write long Python code inside bash. Use write_file + bash.\n"
+            "- Do NOT fetch data with curl/requests. Use the patterns from load_skill (yfinance, OKX API via Python).\n"
+            "- If a script fails, read the error, fix with `edit_file`, re-run. Max 2 retries per script.\n\n"
+            "**Phase 3 — Summarize (MUST use write_file):**\n"
+            "- You MUST call `write_file` with path `report.md` to save your final report as a markdown file.\n"
+            "- This is REQUIRED, not optional. Your final response MUST include a write_file call for report.md.\n"
+            "- The report must include specific numbers, dates, and actionable conclusions.\n"
+            "- After writing report.md, output a brief 2-3 sentence summary in your text response.\n"
+            "- Respond in the same language as the task prompt."
+        )
+    else:
+        # Text-only / JSON-only agents (e.g. india_fund_committee). Never tell
+        # them to load_skill / write_file — models will emit fake DSML tool
+        # calls and the Desk CIO parser then fails with "no JSON object".
+        prompt_parts.append(
+            "## Data Citation Discipline (HARD RULE)\n\n"
+            "You have NO tools in this run. You may NOT cite numbers from memory "
+            "or training data. Cite numbers ONLY from:\n"
+            "  (a) the task prompt (metrics_json, kronos_json, price, etc.),\n"
+            "  (b) the Ground Truth block above (if present),\n"
+            "  (c) Upstream Context above.\n\n"
+            "This applies to synthesis / aggregator / editor roles with an empty "
+            "tool whitelist. If upstream did not provide a specific number, "
+            "do NOT invent one — say so and proceed without it. "
+            "Do NOT emit tool calls or DSML markup."
+        )
+        prompt_parts.append(
+            "## Execution Rules\n\n"
+            "You have NO tools. Do NOT emit tool calls, DSML/XML invoke tags, "
+            "`load_skill`, `write_file`, or `bash`.\n\n"
+            "Respond in one shot with the deliverable required by your role "
+            "(plain analysis text, or a single JSON object if the role demands JSON).\n"
+            "No Phase-1 plan bullets. No fake function-call markup. "
+            "Respond in the same language as the task prompt."
+        )
 
     now = datetime.now(timezone.utc)
     prompt_parts.append(

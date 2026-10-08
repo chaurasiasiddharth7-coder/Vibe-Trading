@@ -33,9 +33,9 @@ from src.market_data import (
 @pytest.mark.parametrize(
     "code,expected",
     [
-        ("600519.SH", "tencent"),
-        ("000001.SZ", "tencent"),
-        ("430139.BJ", "tencent"),
+        ("600519.SH", "baostock"),
+        ("000001.SZ", "baostock"),
+        ("430139.BJ", "baostock"),
         ("AAPL.US", "yahoo"),
         ("700.HK", "yahoo"),
         ("00700.HK", "yahoo"),
@@ -71,7 +71,7 @@ def test_yahoo_loader_accepts_futures_and_forex_suffixes() -> None:
     assert _is_supported("GC=F") is True
     assert _is_supported("EURUSD=X") is True
     assert _is_supported("AAPL.US") is True  # unchanged
-    assert _is_supported("600519.SH") is False  # A-share still not yahoo
+    assert _is_supported("600519.SH") is True  # A-share via Yahoo (.SH→.SS)
 
 
 def test_fetch_market_data_auto_routes_yahoo_suffix_symbols() -> None:

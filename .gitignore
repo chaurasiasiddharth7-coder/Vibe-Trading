@@ -90,3 +90,12 @@ AGENTS.md
 # Alpha Zoo wiki artifacts (generated, not source)
 wiki/alpha-library/manifest.json
 wiki/alpha-library/content/
+
+server.log
+agent/.swarm/
+.impeccable/
+.cursor/
+.planning/ui-reviews/
+third_party/Kronos/
+Vibe-Trading.code-workspace
+frontend/frontend.log

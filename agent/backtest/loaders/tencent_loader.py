@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Dict, List, Optional
 
 import pandas as pd
@@ -21,6 +22,8 @@ from backtest.loaders.registry import register
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+# Keep short so SSL/CDN hangs fail fast and the a_share chain can continue.
+_FETCH_TIMEOUT_S = 8
 
 
 def _is_a_share(code: str) -> bool:
@@ -36,8 +39,14 @@ class DataLoader:
     requires_auth = False
 
     def is_available(self) -> bool:
-        """Always available — uses plain HTTP."""
-        return True
+        """Available unless explicitly demoted (corp SSL often hangs on Tencent)."""
+        return os.environ.get("VIBE_TRADING_SKIP_TENCENT", "").strip() not in {
+            "1",
+            "true",
+            "TRUE",
+            "yes",
+            "YES",
+        }
 
     def __init__(self) -> None:
         pass
@@ -106,7 +115,7 @@ class DataLoader:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Referer": "https://web.ifzq.gtimg.cn/",
         })
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=_FETCH_TIMEOUT_S) as resp:
             raw = resp.read().decode("utf-8")
 
         data = json.loads(raw)

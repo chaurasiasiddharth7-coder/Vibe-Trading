@@ -33,6 +33,7 @@ from backtest.loaders.registry import (
     VALID_SOURCES,
     get_loader_cls_with_fallback,
     resolve_loader,
+    safe_fetch,
 )
 from backtest.loaders.base import NoAvailableSourceError, validate_ohlc
 # Symbol classification lives in ``_market_hooks`` so runner.py and
@@ -1096,18 +1097,33 @@ def _fetch_auto(codes: List[str], config: dict, interval: str = "1D") -> dict:
         normalized_codes = _normalize_codes(market_codes, src_name)
         result_codes = normalized_codes
         fields = config.get("extra_fields") if src_name == "tushare" else None
-        result = loader.fetch(normalized_codes, start_date, end_date, fields=fields, interval=interval)
+        # Exception-aware: SSL hangs / timeouts must not abort the chain.
+        result = safe_fetch(
+            loader,
+            normalized_codes,
+            start_date,
+            end_date,
+            interval=interval,
+            fields=fields,
+        )
 
         # Runtime fallback: try remaining sources when primary returns empty
+        # or raises (safe_fetch already collapsed exceptions to {}).
         if not result:
             for fb_name in FALLBACK_CHAINS.get(market, []):
                 if fb_name == src_name or fb_name not in LOADER_REGISTRY:
                     continue
-                fb_loader = LOADER_REGISTRY[fb_name]()
+                try:
+                    fb_loader = LOADER_REGISTRY[fb_name]()
+                except Exception as exc:
+                    logger.debug("fallback loader %s construct failed: %s", fb_name, exc)
+                    continue
                 if not fb_loader.is_available():
                     continue
                 fb_codes = _normalize_codes(market_codes, fb_name)
-                result = fb_loader.fetch(fb_codes, start_date, end_date, interval=interval)
+                result = safe_fetch(
+                    fb_loader, fb_codes, start_date, end_date, interval=interval
+                )
                 if result:
                     result_codes = fb_codes
                     logger.info("Runtime fallback: %s -> %s for %s", src_name, fb_name, market)
@@ -1141,7 +1157,8 @@ def fetch_data_map(config: dict) -> DataFetchResult:
     else:
         codes = _normalize_codes(codes, source)
         loader = _get_loader(source)()
-        data_map = loader.fetch(
+        data_map = safe_fetch(
+            loader,
             codes,
             config.get("start_date", ""),
             config.get("end_date", ""),
@@ -1162,11 +1179,18 @@ def fetch_data_map(config: dict) -> DataFetchResult:
             for fallback_source in FALLBACK_CHAINS.get(market, []):
                 if fallback_source == source or fallback_source not in LOADER_REGISTRY:
                     continue
-                fallback_loader = LOADER_REGISTRY[fallback_source]()
+                try:
+                    fallback_loader = LOADER_REGISTRY[fallback_source]()
+                except Exception as exc:
+                    logger.debug(
+                        "fallback loader %s construct failed: %s", fallback_source, exc
+                    )
+                    continue
                 if not fallback_loader.is_available():
                     continue
                 fallback_codes = _normalize_codes(codes, fallback_source)
-                data_map = fallback_loader.fetch(
+                data_map = safe_fetch(
+                    fallback_loader,
                     fallback_codes,
                     config.get("start_date", ""),
                     config.get("end_date", ""),

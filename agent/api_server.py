@@ -276,6 +276,10 @@ from src.api.live_routes import (  # noqa: F401, E402
 from src.api.alpha_routes import register_alpha_routes  # noqa: E402
 register_alpha_routes(app)
 
+# --- AlphaDesk India (analysis + Kronos) ---
+from src.api.alphadesk_routes import register_alphadesk_routes  # noqa: E402
+register_alphadesk_routes(app)
+
 # --- Auth helpers (SSE tickets) ---
 from src.api.auth_routes import register_auth_routes  # noqa: E402
 register_auth_routes(app)

@@ -41,12 +41,12 @@ _INTERVAL_MAP = {
 def _is_supported(code: str) -> bool:
     """Return whether *code* is a symbol this loader handles.
 
-    Covers US/HK/India equities plus Yahoo's own futures (``GC=F``) and forex
-    (``EURUSD=X``) suffix conventions, which the public chart endpoint serves
-    verbatim (the code is used as-is in the request URL, no conversion) (#718).
+    Covers US/HK/India/A-share equities plus Yahoo's own futures (``GC=F``) and
+    forex (``EURUSD=X``) suffix conventions. A-share ``.SH`` is mapped to Yahoo
+    ``.SS`` in :func:`yahoo_client.map_symbol`; ``.SZ`` is Yahoo-native.
     """
     upper = code.strip().upper()
-    return upper.endswith((".US", ".HK", ".NS", ".BO", "=F", "=X"))
+    return upper.endswith((".US", ".HK", ".NS", ".BO", ".SZ", ".SH", ".SS", "=F", "=X"))
 
 
 def _to_yahoo_interval(interval: str) -> str:
@@ -164,7 +164,7 @@ class DataLoader:
     """Yahoo Finance US/HK equity OHLCV loader (free, direct HTTP, no auth)."""
 
     name = "yahoo"
-    markets = {"us_equity", "hk_equity", "india_equity"}
+    markets = {"us_equity", "hk_equity", "india_equity", "a_share"}
     requires_auth = False
 
     def is_available(self) -> bool:
@@ -235,8 +235,8 @@ class DataLoader:
             interval: Backtest interval string.
 
         Returns:
-            The OHLCV DataFrame for *code*, ``None`` if it is not a US/HK/India
-            symbol or Yahoo returns no usable bars.
+            The OHLCV DataFrame for *code*, ``None`` if it is not a supported
+            equity/futures/forex symbol or Yahoo returns no usable bars.
         """
         if not _is_supported(code):
             return None

@@ -72,6 +72,40 @@ export interface UploadResult {
   filename: string;
 }
 
+export interface AnalysisPayload {
+  symbol: string;
+  ticker: string;
+  current_price: number;
+  change_percent: number;
+  metrics: Record<string, unknown>;
+  chart_data: Array<{
+    time: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume?: number;
+  }>;
+}
+
+export interface KronosForecastPayload {
+  forecast_data: Array<{
+    time: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+  }>;
+  kronos_projection: {
+    expected_change_percent: number;
+    projected_high: number;
+    projected_low: number;
+    trajectory_bias: string;
+    model: string;
+  };
+  historical_data?: AnalysisPayload["chart_data"];
+}
+
 async function uploadFile(file: File): Promise<UploadResult> {
   const form = new FormData();
   form.append("file", file);
@@ -89,6 +123,228 @@ function appendQueryParam(url: string, key: string, value: string): string {
 
 export const api = {
   uploadFile,
+  getAlphadeskAnalysis: (symbol: string, period = "6mo", interval = "1d") =>
+    request<{ ok: boolean; data: AnalysisPayload }>(
+      `/api/analysis/${encodeURIComponent(symbol)}?period=${encodeURIComponent(period)}&interval=${encodeURIComponent(interval)}`,
+    ),
+  getKronosForecast: (symbol: string, lookback = 400, predLen = 15) =>
+    request<{ ok: boolean; data: KronosForecastPayload }>(
+      `/api/kronos/forecast/${encodeURIComponent(symbol)}?lookback=${lookback}&pred_len=${predLen}`,
+    ),
+  saveDeskSignal: (
+    symbol: string,
+    planOrRaw: Record<string, unknown> | string,
+    extras?: Record<string, unknown>,
+    opts?: {
+      fallback_heuristic?: boolean;
+      analysis?: Record<string, unknown>;
+      kronos?: Record<string, unknown>;
+    },
+  ) =>
+    request<{ ok: boolean; signal_id: string; plan: Record<string, unknown> }>("/api/desk/signal", {
+      method: "POST",
+      body: JSON.stringify(
+        typeof planOrRaw === "string"
+          ? {
+              symbol,
+              raw: planOrRaw,
+              extras,
+              fallback_heuristic: opts?.fallback_heuristic ?? false,
+              analysis: opts?.analysis,
+              kronos: opts?.kronos,
+            }
+          : { symbol, plan: planOrRaw, extras },
+      ),
+    }),
+  placeDeskPaperOrder: (body: {
+    symbol: string;
+    side: "buy" | "sell";
+    quantity: number;
+    signal_id?: string;
+    profile_id?: string;
+    record_close?: boolean;
+    r_multiple?: number;
+    pnl_inr?: number;
+    engine_id?: string;
+    close_outcome?: {
+      r_multiple?: number;
+      pnl_inr?: number;
+      engine_id?: string;
+    };
+  }) =>
+    request<{
+      ok: boolean;
+      profile_id: string;
+      result: unknown;
+      outcome?: { path: string; engine: Record<string, unknown> } | null;
+    }>("/api/desk/paper-order", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getDeskLiveStatus: (broker = "dhan") =>
+    request<{
+      ok: boolean;
+      data: Record<string, unknown>;
+      sync: Record<string, unknown> | null;
+      tickets: Array<Record<string, unknown>>;
+    }>(`/api/desk/live/status?broker=${encodeURIComponent(broker)}`),
+  postDeskLiveUnlock: (body: {
+    engine_id: string;
+    action?: "grant" | "revoke";
+    approved_by?: string;
+  }) =>
+    request<{ ok: boolean; unlock: Record<string, unknown> }>("/api/desk/live/unlock", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  postDeskSignalApprove: (signalId: string, approved_by = "operator") =>
+    request<{ ok: boolean; signal: Record<string, unknown> }>(
+      `/api/desk/signal/${encodeURIComponent(signalId)}/approve`,
+      { method: "POST", body: JSON.stringify({ approved_by }) },
+    ),
+  postDeskLiveSync: (profile_id?: string) =>
+    request<{ ok: boolean; data: Record<string, unknown> }>("/api/desk/live/sync", {
+      method: "POST",
+      body: JSON.stringify(profile_id ? { profile_id } : {}),
+    }),
+  postDeskLiveTicket: (body: {
+    signal_id: string;
+    engine_id?: string;
+    symbol?: string;
+    side?: "buy" | "sell";
+    quantity?: number;
+    notional_inr?: number;
+    order_type?: string;
+    limit_price?: number;
+    product?: string;
+    broker?: string;
+    notes?: string;
+  }) =>
+    request<{ ok: boolean; ticket: Record<string, unknown> }>("/api/desk/live/ticket", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  postDeskLiveTicketFill: (
+    ticketId: string,
+    body?: {
+      fill_price?: number;
+      fill_qty?: number;
+      broker_order_id?: string;
+      notes?: string;
+    },
+  ) =>
+    request<{ ok: boolean; ticket: Record<string, unknown> }>(
+      `/api/desk/live/ticket/${encodeURIComponent(ticketId)}/fill`,
+      { method: "POST", body: JSON.stringify(body ?? {}) },
+    ),
+  postDeskReplayBrPdhPdl: (body?: {
+    symbol?: string;
+    period?: string;
+    max_trades?: number;
+    risk_inr?: number;
+    skip_if_n_ge?: number;
+  }) =>
+    request<{ ok: boolean; data: Record<string, unknown> }>("/api/desk/live/replay-br-pdh-pdl", {
+      method: "POST",
+      body: JSON.stringify(body ?? {}),
+    }),
+  postDeskMorning: (body?: { target_net?: number; force?: boolean }) =>
+    request<{ ok: boolean; data: Record<string, unknown> }>("/api/desk/morning", {
+      method: "POST",
+      body: JSON.stringify(body ?? {}),
+    }),
+  getDeskTaxYtd: (fy?: string) =>
+    request<{ ok: boolean; data: Record<string, unknown> }>(
+      `/api/desk/tax-ytd${fy ? `?fy=${encodeURIComponent(fy)}` : ""}`,
+    ),
+  getDeskTokenBudget: () =>
+    request<{ ok: boolean; data: Record<string, unknown> }>("/api/desk/token-budget"),
+  postDeskAuditExport: (as_zip = true) =>
+    request<{ ok: boolean; data: Record<string, unknown> }>("/api/desk/audit/export", {
+      method: "POST",
+      body: JSON.stringify({ as_zip }),
+    }),
+  saveDeskPortfolio: (holdings: Record<string, unknown>[]) =>
+    request<{ ok: boolean; count: number }>("/api/desk/portfolio", {
+      method: "POST",
+      body: JSON.stringify({ holdings }),
+    }),
+  getDeskPortfolio: () =>
+    request<{ ok: boolean; data: unknown }>("/api/desk/portfolio"),
+  deskSellLadder: (target_net: number, holdings?: Record<string, unknown>[]) =>
+    request<{ ok: boolean; raised_net: number; orders: unknown[] }>("/api/desk/sell-ladder", {
+      method: "POST",
+      body: JSON.stringify({ target_net, holdings }),
+    }),
+  getDeskScorecard: () =>
+    request<{
+      ok: boolean
+      engines: Array<Record<string, unknown>>
+      recent_outcomes: Array<Record<string, unknown>>
+    }>("/api/desk/scorecard"),
+  getDeskSurvival: () =>
+    request<{ ok: boolean; data: Record<string, unknown> }>("/api/desk/survival"),
+  postDeskHeartbeat: () =>
+    request<{ ok: boolean; data: Record<string, unknown> }>("/api/desk/survival/heartbeat", {
+      method: "POST",
+      body: "{}",
+    }),
+  postPmPlan: (body: {
+    target_net?: number;
+    max_names?: number;
+    holdings?: Record<string, unknown>[];
+    symbols?: string[];
+    full_universe?: boolean;
+    include_etfs?: boolean;
+  }) =>
+    request<{ ok: boolean; plan: Record<string, unknown> }>("/api/desk/pm/plan", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  postDeskQuickSignal: (body: {
+    symbol: string;
+    analysis?: Record<string, unknown>;
+    kronos?: Record<string, unknown>;
+    persist?: boolean;
+  }) =>
+    request<{ ok: boolean; signal_id?: string; plan: Record<string, unknown> }>(
+      "/api/desk/quick-signal",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+    postDeskArena: (body: {
+    symbol: string
+    target_net?: number
+    analysis?: Record<string, unknown>
+    kronos?: Record<string, unknown>
+    debate_raw?: string
+    include_break_retest?: boolean
+  }) =>
+    request<{
+      ok: boolean
+      signal_id: string
+      plan: Record<string, unknown>
+      votes: Array<Record<string, unknown>>
+      levels?: Array<Record<string, unknown>>
+      gates?: Record<string, unknown>
+    }>("/api/desk/arena", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getBreakRetest: (symbol: string) =>
+    request<{ ok: boolean; data: Record<string, unknown> }>(
+      `/api/desk/break-retest/${encodeURIComponent(symbol)}`,
+    ),
+  postDeskOutcome: (body: {
+    signal_id: string
+    engine_id?: string
+    r_multiple: number
+    pnl_inr: number
+    notes?: string
+  }) =>
+    request<{ ok: boolean; engine: Record<string, unknown> }>("/api/desk/outcome", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   getCorrelation: (codes: string, days: number, method: "pearson" | "spearman") =>
     request<CorrelationResponse>(
       `/correlation?codes=${encodeURIComponent(codes)}&days=${encodeURIComponent(String(days))}&method=${encodeURIComponent(method)}`,
