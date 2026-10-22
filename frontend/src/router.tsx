@@ -1,5 +1,5 @@
-import { Suspense, lazy, type ComponentType } from "react";
-import { Navigate, createBrowserRouter } from "react-router-dom";
+import { Suspense, lazy, useEffect, type ComponentType } from "react";
+import { Navigate, createBrowserRouter, useRouteError } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { DASHBOARD_ONLY } from "@/lib/hosted";
 
@@ -46,11 +46,58 @@ function wrap(Component: ComponentType) {
 
 const toDashboard = <Navigate to="/dashboard" replace />;
 
-export const router = createBrowserRouter([
-  {
-    element: <Layout />,
-    children: [
-      { path: "/", element: DASHBOARD_ONLY ? toDashboard : wrap(Home) },
+/**
+ * A browser tab left open across a deploy still points at old script files that no longer exist.
+ * Reload once to pick up the new build; if it keeps failing, show a plain message.
+ */
+function RouteError() {
+  const error = useRouteError();
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const stale = /dynamically imported module|Importing a module script failed|Loading chunk/i.test(message);
+  useEffect(() => {
+    if (!stale) return;
+    try {
+      if (sessionStorage.getItem("chunk-reload") !== "1") {
+        sessionStorage.setItem("chunk-reload", "1");
+        window.location.reload();
+        return;
+      }
+      sessionStorage.removeItem("chunk-reload");
+    } catch {
+      // storage unavailable: show the message below
+    }
+  }, [stale]);
+  return (
+    <main className="min-h-screen grid place-items-center p-6 text-center">
+      <div className="space-y-3 max-w-md">
+        <h1 className="text-xl font-semibold">{stale ? "A new version is available" : "Something went wrong"}</h1>
+        <p className="text-sm text-muted-foreground">
+          {stale ? "Reload the page to get the latest version." : "Try reloading. If it keeps happening, go back to the dashboard."}
+        </p>
+        <div className="flex justify-center gap-2">
+          <button type="button" onClick={() => window.location.reload()} className="min-h-10 px-4 rounded-md bg-emerald-600 text-white text-sm font-semibold">
+            Reload
+          </button>
+          <a href="/dashboard" className="min-h-10 px-4 inline-flex items-center rounded-md border border-border text-sm">
+            Dashboard
+          </a>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+const dashboardRoutes = [
+  { path: "/dashboard", element: wrap(Dashboard) },
+  { path: "/guide", element: <Navigate to="/dashboard" replace /> },
+  { path: "/desk", element: <Navigate to="/dashboard?tab=chart" replace /> },
+];
+
+// The hosted build only has a backend for the dashboard, so every other address lands there.
+const appRoutes = DASHBOARD_ONLY
+  ? [{ path: "/", element: toDashboard }, ...dashboardRoutes, { path: "*", element: toDashboard }]
+  : [
+      { path: "/", element: wrap(Home) },
       { path: "/agent", element: wrap(Agent) },
       { path: "/runtime", element: wrap(Runtime) },
       { path: "/reports", element: wrap(Reports) },
@@ -59,13 +106,16 @@ export const router = createBrowserRouter([
       { path: "/compare", element: wrap(Compare) },
       { path: "/correlation", element: wrap(Correlation) },
       { path: "/alpha-zoo", element: wrap(AlphaZoo) },
-      { path: "/dashboard", element: wrap(Dashboard) },
-      { path: "/guide", element: <Navigate to="/dashboard" replace /> },
-      { path: "/desk", element: <Navigate to="/dashboard?tab=chart" replace /> },
+      ...dashboardRoutes,
       { path: "/alpha-zoo/bench", element: wrap(AlphaZoo) },
       { path: "/alpha-zoo/compare", element: wrap(AlphaZoo) },
       { path: "/alpha-zoo/:alphaId", element: wrap(AlphaZoo) },
-      ...(DASHBOARD_ONLY ? [{ path: "*", element: toDashboard }] : []),
-    ],
+    ];
+
+export const router = createBrowserRouter([
+  {
+    element: <Layout />,
+    errorElement: <RouteError />,
+    children: appRoutes,
   },
 ]);
