@@ -26,7 +26,13 @@ export function Layout() {
     { to: "/settings", icon: Settings, label: t('layout.settings') },
     { to: "/correlation", icon: BarChart3, label: t('layout.correlation') },
   ];
-  const nav = DASHBOARD_ONLY ? NAV.filter((n) => n.to === "/dashboard") : NAV;
+  const nav = DASHBOARD_ONLY
+    ? [
+        ...NAV.filter((n) => n.to === "/dashboard"),
+        // The full Settings page needs server routes the hosted site doesn't have; this opens the dashboard's own settings.
+        { to: "/dashboard?settings=1", icon: Settings, label: "Settings" },
+      ]
+    : NAV;
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
   const { dark, toggle } = useDarkMode();
@@ -111,7 +117,11 @@ export function Layout() {
                 className={cn(
                   "flex items-center rounded-md text-sm transition-colors",
                   collapsed ? "justify-center p-2" : "gap-3 px-3 py-2",
-                  (to === "/" ? pathname === "/" : pathname.startsWith(to))
+                  (DASHBOARD_ONLY
+                    ? pathname.startsWith("/dashboard") && to.includes("settings=1") === (searchParams.get("settings") === "1")
+                    : to === "/"
+                      ? pathname === "/"
+                      : pathname.startsWith(to))
                     ? "bg-primary/10 text-primary font-medium"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}

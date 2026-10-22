@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 import ipaddress
 import logging
+import os
 import re
 import secrets
 import threading
@@ -337,8 +338,23 @@ def _origin_matches_request_host(origin: str, request: Request) -> bool:
     return origin_port == request_port
 
 
+def _trusted_origin(origin: Optional[str]) -> bool:
+    """True when ``origin`` is listed in TRUSTED_ORIGINS and an API key is configured.
+
+    For a front end hosted elsewhere (for example Vercel proxying to this server).
+    The bearer key is what protects the request, and a cross-site page cannot attach
+    it, so a listed origin is only honoured when a key is set.
+    """
+    if not origin or not _configured_api_key():
+        return False
+    allowed = {o.strip().rstrip("/").lower() for o in os.environ.get("TRUSTED_ORIGINS", "").split(",") if o.strip()}
+    return origin.strip().rstrip("/").lower() in allowed
+
+
 def _reject_cross_site_browser_request(request: Request) -> None:
     """Reject unsafe browser requests from untrusted cross-site origins."""
+    if _trusted_origin(request.headers.get("origin")):
+        return
     sec_fetch_site = request.headers.get("sec-fetch-site", "").lower()
     if sec_fetch_site == "cross-site":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cross-site request denied")

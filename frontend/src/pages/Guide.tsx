@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ChevronDown, Compass, Loader2, Minus, Plus } from "lucide-react";
 import {
   api,
@@ -441,6 +442,14 @@ export function Guide({
   const showTrades = view !== "ideas";
   const Shell = embedded ? "div" : "main";
   const [settingsOpen, setSettingsOpen] = useState(embedded ? false : true);
+  const [searchParams] = useSearchParams();
+  const wantSettings = searchParams.get("settings") === "1";
+  useEffect(() => {
+    if (!wantSettings) return;
+    setSettingsOpen(true);
+    const t = window.setTimeout(() => document.getElementById("settings-h")?.scrollIntoView({ block: "start" }), 50);
+    return () => window.clearTimeout(t);
+  }, [wantSettings]);
   const Heading = embedded ? "h2" : "h1";
   const [trades, setTrades] = useState<PaperTrade[]>([]);
   const [track, setTrack] = useState<TrackRecord | null>(null);
