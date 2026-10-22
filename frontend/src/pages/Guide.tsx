@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { PracticeTrades } from "@/components/desk/PracticeTrades";
 import { SymbolInsight } from "@/components/desk/SymbolInsight";
+import { JobLostError, friendlyError, pollJob, type Progress } from "@/lib/pollJob";
 import {
   EXIT_PLANS,
   SIDE_LABEL,
@@ -67,18 +68,6 @@ const FALLBACK_UNIVERSES = [
   { key: "smallcap250", label: "Smallcap 250: smaller companies" },
 ];
 
-type Progress = { done: number; total: number } | null;
-
-async function pollJob<T>(jobId: string, onProgress: (p: Progress) => void, alive: () => boolean): Promise<T | null> {
-  for (;;) {
-    await new Promise((r) => setTimeout(r, 1500));
-    if (!alive()) return null;
-    const { job } = await api.getBoardJob<T>(jobId);
-    onProgress({ done: job.done, total: job.total });
-    if (job.status === "done") return job.result;
-    if (job.status === "failed") throw new Error(job.error ?? "scan failed");
-  }
-}
 
 function loadPrefs(): Prefs {
   try {
@@ -525,8 +514,16 @@ export function Guide({
             }
           }
         }
-        const { job_id } = await api.postBoardScan({ universe: prefs.universe, include_funds: prefs.includeFunds });
-        const result = await pollJob<SignalBoard>(job_id, (p) => alive() && setProgress(p), alive);
+        const start = () => api.postBoardScan({ universe: prefs.universe, include_funds: prefs.includeFunds });
+        const watch = (id: string) => pollJob<SignalBoard>(id, (p) => alive() && setProgress(p), alive);
+        let result: SignalBoard | null;
+        try {
+          result = await watch((await start()).job_id);
+        } catch (e) {
+          if (!(e instanceof JobLostError)) throw e;
+          // The server restarted mid-scan: start it again once.
+          result = await watch((await start()).job_id);
+        }
         if (!result || !alive()) return;
         setBoard(result);
         setTrack(result.track_record);
@@ -536,7 +533,7 @@ export function Guide({
         }
         void refreshTrades();
       } catch (e) {
-        if (alive()) setError(e instanceof Error ? e.message : String(e));
+        if (alive()) setError(friendlyError(e));
       } finally {
         if (alive()) {
           setLoading(false);

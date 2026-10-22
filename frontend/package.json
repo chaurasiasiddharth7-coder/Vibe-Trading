@@ -10,7 +10,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint src/components/desk src/components/layout src/pages/Dashboard.tsx src/pages/Guide.tsx src/pages/Desk.tsx src/router.tsx --max-warnings 0",
+    "lint": "eslint src/components/desk src/components/layout src/pages/Dashboard.tsx src/pages/Guide.tsx src/pages/Desk.tsx src/router.tsx src/lib/pollJob.ts --max-warnings 0",
     "lint:all": "eslint src"
   },
   "dependencies": {
