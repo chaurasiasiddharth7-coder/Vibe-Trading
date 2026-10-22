@@ -21,6 +21,7 @@ vi.mock("@/pages/Guide", async () => {
     },
   };
 });
+vi.mock("@/components/desk/ApiKeyGate", () => ({ ApiKeyGate: () => null }));
 vi.mock("@/pages/Desk", () => ({ Desk: () => <div data-testid="desk">desk</div> }));
 
 function Where() {

@@ -5,6 +5,7 @@ import type { PaperTrade, TrackRecord } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Guide } from "@/pages/Guide";
 import { inr, trustSentence } from "@/components/desk/plain";
+import { ApiKeyGate } from "@/components/desk/ApiKeyGate";
 
 const Desk = lazy(() => import("@/pages/Desk").then((m) => ({ default: m.Desk })));
 
@@ -93,6 +94,8 @@ export function Dashboard() {
           Today's ideas, your practice trades and the charts, in one place. All trades here use fake money.
         </p>
       </header>
+
+      <ApiKeyGate />
 
       <section aria-label="Summary" className="space-y-3">
         <dl className="grid grid-cols-2 lg:grid-cols-4 gap-3">

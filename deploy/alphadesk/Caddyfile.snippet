@@ -1,0 +1,13 @@
+# Add next to the existing site blocks, after getting a certificate for the host.
+desk.example.com {
+	tls /etc/caddy/certs/desk.crt /etc/caddy/certs/desk.key
+	encode gzip
+	header X-Content-Type-Options nosniff
+	@dash path /api/desk/* /api/analysis/* /api/kronos/* /live
+	handle @dash {
+		reverse_proxy 127.0.0.1:8899
+	}
+	handle {
+		respond "Not found" 404
+	}
+}

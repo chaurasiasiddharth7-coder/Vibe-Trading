@@ -1,0 +1,21 @@
+services:
+  alphadesk-api:
+    build:
+      context: ../..
+      dockerfile: deploy/alphadesk/Dockerfile
+    image: alphadesk-api:latest
+    ports:
+      - "127.0.0.1:8899:8899"   # Caddy on the host proxies to this; never exposed directly
+    env_file:
+      - .env                    # API_AUTH_KEY (required: the server refuses a non-loopback bind without it)
+    volumes:
+      - alphadesk-home:/home/vibe/.vibe-trading   # trades, backups, caches, model downloads
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 3g
+    cpus: 1.5
+    pids_limit: 512
+    restart: unless-stopped
+
+volumes:
+  alphadesk-home:
