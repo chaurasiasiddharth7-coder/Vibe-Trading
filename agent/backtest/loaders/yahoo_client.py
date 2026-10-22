@@ -222,9 +222,12 @@ def _parse_chart(payload: Any, yahoo_symbol: str) -> List[Dict[str, Any]]:
     timestamps = result.get("timestamp") or []
     quotes = (((result.get("indicators") or {}).get("quote")) or [{}])[0] or {}
 
+    meta = result.get("meta") or {}
     rows: List[Dict[str, Any]] = []
     for index, ts in enumerate(timestamps):
         values = {field: _at(quotes.get(field), index) for field in _QUOTE_FIELDS}
+        if index == len(timestamps) - 1:
+            values = _fill_latest_from_meta(values, ts, meta)
         # A non-trading slot leaves OHLC null; skip rather than emit a NaN bar.
         if any(values[field] is None for field in ("open", "high", "low", "close")):
             continue
@@ -232,6 +235,40 @@ def _parse_chart(payload: Any, yahoo_symbol: str) -> List[Dict[str, Any]]:
         row.update({field: _to_float(values[field]) for field in _QUOTE_FIELDS})
         rows.append(row)
     return rows
+
+
+_META_FIELDS = {
+    "close": "regularMarketPrice",
+    "high": "regularMarketDayHigh",
+    "low": "regularMarketDayLow",
+    "volume": "regularMarketVolume",
+}
+
+
+def _fill_latest_from_meta(values: Dict[str, Any], ts: Any, meta: Dict[str, Any]) -> Dict[str, Any]:
+    """Complete the newest bar from ``meta`` when Yahoo leaves it partly null.
+
+    Yahoo often returns the latest session's daily bar with ``close: null``
+    (even after the close) while ``meta.regularMarketPrice`` holds the last
+    trade. Only fills when the bar and ``regularMarketTime`` fall on the same
+    exchange-local day, so an older bar is never stamped with today's price.
+    """
+    if all(values.get(f) is not None for f in ("open", "high", "low", "close")):
+        return values
+    market_time = meta.get("regularMarketTime")
+    if market_time is None or ts is None or values.get("open") is None:
+        return values
+    offset = int(meta.get("gmtoffset") or 0)
+    try:
+        if (int(ts) + offset) // 86400 != (int(market_time) + offset) // 86400:
+            return values
+    except (TypeError, ValueError):
+        return values
+    filled = dict(values)
+    for field, key in _META_FIELDS.items():
+        if filled.get(field) is None and meta.get(key) is not None:
+            filled[field] = meta[key]
+    return filled
 
 
 def _at(series: Any, index: int) -> Any:

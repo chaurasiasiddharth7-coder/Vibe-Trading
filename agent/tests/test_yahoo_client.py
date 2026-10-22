@@ -374,3 +374,55 @@ class TestSearch:
     def test_empty_payload_returns_empty(self, monkeypatch):
         monkeypatch.setattr(yahoo_client, "throttled_get_json", lambda url, **kw: {})
         assert yahoo_client.search("zzz") == []
+
+
+def test_parse_chart_fills_latest_bar_close_from_meta():
+    from backtest.loaders.yahoo_client import _parse_chart
+
+    day = 1791856500  # 2026-10-13 09:15 IST
+    payload = {
+        "chart": {
+            "result": [
+                {
+                    "meta": {
+                        "regularMarketTime": day + 22109,
+                        "gmtoffset": 19800,
+                        "regularMarketPrice": 1166.7,
+                    },
+                    "timestamp": [day - 86400, day],
+                    "indicators": {
+                        "quote": [
+                            {
+                                "open": [1180.3, 1158.9],
+                                "high": [1185.5, 1168.3],
+                                "low": [1153.2, 1152.2],
+                                "close": [1158.9, None],
+                                "volume": [11338332, 10983647],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+    }
+    rows = _parse_chart(payload, "RELIANCE.NS")
+    assert len(rows) == 2
+    assert rows[-1]["close"] == 1166.7
+
+
+def test_parse_chart_does_not_fill_older_bar_from_meta():
+    from backtest.loaders.yahoo_client import _parse_chart
+
+    day = 1791856500
+    payload = {
+        "chart": {
+            "result": [
+                {
+                    "meta": {"regularMarketTime": day + 86400 * 2, "gmtoffset": 19800, "regularMarketPrice": 1.0},
+                    "timestamp": [day],
+                    "indicators": {"quote": [{"open": [10.0], "high": [11.0], "low": [9.0], "close": [None], "volume": [1]}]},
+                }
+            ]
+        }
+    }
+    assert _parse_chart(payload, "X.NS") == []

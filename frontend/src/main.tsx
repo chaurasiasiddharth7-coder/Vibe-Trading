@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 import { Toaster } from "sonner";
+import { Agentation } from "agentation";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { router } from "./router";
 // Self-hosted fonts (VT-006): vendor the woff2 files locally instead of the
@@ -23,6 +24,7 @@ createRoot(document.getElementById("root")!).render(
     <ErrorBoundary>
       <RouterProvider router={router} />
       <Toaster position="bottom-right" richColors closeButton duration={3500} />
+      {import.meta.env.DEV && <Agentation endpoint="http://localhost:4747" />}
     </ErrorBoundary>
   </StrictMode>
 );

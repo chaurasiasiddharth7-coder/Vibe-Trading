@@ -72,6 +72,161 @@ export interface UploadResult {
   filename: string;
 }
 
+export type BoardSide = "LONG" | "SHORT" | "STEER_CLEAR" | "NO_EDGE";
+
+export interface BoardRow {
+  symbol: string;
+  name?: string;
+  industry?: string;
+  asset_class: string;
+  as_of: string | null;
+  side: BoardSide;
+  score: number;
+  votes: { trend: number; structure: number; momentum: number; forecast: number };
+  reasons: string[];
+  cautions: string[];
+  price: number;
+  change_percent: number | null;
+  rsi: number | null;
+  atr: number | null;
+  kronos_change_pct: number | null;
+  entry: number | null;
+  stop: number | null;
+  target: number | null;
+  risk_pct: number | null;
+  short_note: string | null;
+  stale: boolean;
+  history: {
+    side: HistoryStats | null;
+    symbol_side: HistoryStats | null;
+    symbol: Pick<HistoryStats, "trades" | "win_rate" | "avg_r"> | null;
+  } | null;
+}
+
+export interface HistoryStats {
+  trades: number;
+  win_rate: number | null;
+  avg_r: number | null;
+  total_r: number;
+  profit_factor: number | null;
+}
+
+export interface TrackRecord {
+  closed_trades: number;
+  win_rate: number | null;
+  expectancy_r: number | null;
+  sleeve_inr?: number;
+  verdict: "untested" | "too_few_trades" | "positive" | "negative";
+}
+
+export interface PaperTrade {
+  id: string;
+  symbol: string;
+  side: "LONG" | "SHORT";
+  entry: number;
+  stop: number;
+  target: number;
+  qty: number;
+  risk_inr: number;
+  opened_at: string;
+  opened_bar: string | null;
+  status: "OPEN" | "CLOSED";
+  exit_price?: number;
+  exit_reason?: "stop" | "target" | "time" | "trail" | "manual";
+  exit_date?: string;
+  r_multiple?: number;
+  pnl_inr?: number;
+  current_price?: number;
+  price_as_of?: string | null;
+  unrealized_inr?: number;
+  closed_at?: string;
+  bars_held?: number;
+  atr?: number | null;
+  plan?: ExitPlan;
+  plans?: Array<{ plan: ExitPlan; from: string | null; set_at?: string }>;
+  stop_now?: number;
+  best_price?: number;
+  locked_in_inr?: number;
+  data_warning?: { date: string; change_pct: number } | null;
+  stop_moves?: Array<{ price: number; from: string | null; set_at?: string }>;
+  suggestion?: { action: "hold" | "trail" | "breakeven" | "exit"; text: string; stop?: number };
+  review?: {
+    best_move_r: number;
+    worst_move_r: number;
+    what_happened: string;
+    lesson: string;
+    if_exit_style: Record<ExitPlan, number | null>;
+    best_style: ExitPlan | null;
+  } | null;
+  votes?: BoardRow["votes"] | null;
+  decision?: {
+    name?: string | null;
+    industry?: string | null;
+    score?: number | null;
+    reasons?: string[];
+    cautions?: string[];
+    rsi?: number | null;
+    atr?: number | null;
+    kronos_change_pct?: number | null;
+    risk_pct?: number | null;
+    history?: HistoryStats | null;
+    side_history?: HistoryStats | null;
+  };
+}
+
+export interface BoardJob<T> {
+  id: string;
+  kind: "scan" | "replay";
+  status: "running" | "done" | "failed";
+  done: number;
+  total: number;
+  result: T | null;
+  error: string | null;
+}
+
+export type ExitPlan = "fixed" | "breakeven" | "trail" | "trail_run";
+
+export interface PlanResult {
+  overall: HistoryStats;
+  long: HistoryStats;
+  short: HistoryStats;
+  exit_mix: Record<"target" | "stop" | "trail" | "time", number>;
+}
+
+export interface HistoryTest {
+  plans?: Record<ExitPlan, PlanResult>;
+  universe?: string;
+  ran_at: string;
+  period: string;
+  rules: string;
+  overall: HistoryStats;
+  long: HistoryStats;
+  short: HistoryStats;
+  by_symbol?: Record<string, HistoryStats & { LONG: HistoryStats; SHORT: HistoryStats }>;
+}
+
+export interface SignalBoard {
+  engine_id: string;
+  universe?: string;
+  include_funds?: boolean;
+  scanned_at?: string;
+  long: BoardRow[];
+  short: BoardRow[];
+  steer_clear: BoardRow[];
+  no_edge: string[];
+  rows: BoardRow[];
+  scanned: number;
+  failed: Array<{ symbol: string; error: string }>;
+  kronos_live: boolean;
+  as_of: string | null;
+  method: string;
+  track_record: TrackRecord;
+  expected_session: string;
+  stale: string[];
+  history: HistoryTest | null;
+  just_closed?: PaperTrade[];
+}
+
 export interface AnalysisPayload {
   symbol: string;
   ticker: string;
@@ -127,9 +282,9 @@ export const api = {
     request<{ ok: boolean; data: AnalysisPayload }>(
       `/api/analysis/${encodeURIComponent(symbol)}?period=${encodeURIComponent(period)}&interval=${encodeURIComponent(interval)}`,
     ),
-  getKronosForecast: (symbol: string, lookback = 400, predLen = 15) =>
+  getKronosForecast: (symbol: string, lookback = 400, predLen = 15, fresh = false) =>
     request<{ ok: boolean; data: KronosForecastPayload }>(
-      `/api/kronos/forecast/${encodeURIComponent(symbol)}?lookback=${lookback}&pred_len=${predLen}`,
+      `/api/kronos/forecast/${encodeURIComponent(symbol)}?lookback=${lookback}&pred_len=${predLen}${fresh ? "&bypass_cache=true" : ""}`,
     ),
   saveDeskSignal: (
     symbol: string,
@@ -300,6 +455,69 @@ export const api = {
     request<{ ok: boolean; plan: Record<string, unknown> }>("/api/desk/pm/plan", {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+  postDeskBoard: (body: { symbols?: string[]; with_kronos?: boolean } = {}) =>
+    request<{ ok: boolean; data: SignalBoard }>("/api/desk/board", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getBoardPaper: () =>
+    request<{ ok: boolean; trades: PaperTrade[]; track_record: TrackRecord }>(
+      "/api/desk/board/paper",
+    ),
+  postBoardPaper: (body: {
+    symbol: string;
+    risk_inr: number;
+    name?: string;
+    industry?: string;
+    universe?: string;
+    plan?: ExitPlan;
+  }) =>
+    request<{ ok: boolean; trade: PaperTrade }>("/api/desk/board/paper", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  postBoardPlan: (tradeId: string, plan: ExitPlan) =>
+    request<{ ok: boolean; trade: PaperTrade }>(
+      `/api/desk/board/paper/${encodeURIComponent(tradeId)}/plan`,
+      { method: "POST", body: JSON.stringify({ plan }) },
+    ),
+  postBoardStop: (tradeId: string, price: number) =>
+    request<{ ok: boolean; trade: PaperTrade }>(
+      `/api/desk/board/paper/${encodeURIComponent(tradeId)}/stop`,
+      { method: "POST", body: JSON.stringify({ price }) },
+    ),
+  postBoardExit: (tradeId: string) =>
+    request<{ ok: boolean; trade: PaperTrade; track_record: TrackRecord }>(
+      `/api/desk/board/paper/${encodeURIComponent(tradeId)}/exit`,
+      { method: "POST", body: "{}" },
+    ),
+  postBoardSettle: () =>
+    request<{ ok: boolean; closed: PaperTrade[]; track_record: TrackRecord }>(
+      "/api/desk/board/settle",
+      { method: "POST", body: "{}" },
+    ),
+  getUniverses: () =>
+    request<{ ok: boolean; data: Array<{ key: string; label: string }> }>("/api/desk/universes"),
+  postBoardScan: (body: { universe: string; include_funds: boolean }) =>
+    request<{ ok: boolean; job_id: string }>("/api/desk/board/scan", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getBoardJob: <T,>(jobId: string) =>
+    request<{ ok: boolean; job: BoardJob<T> }>(`/api/desk/board/jobs/${encodeURIComponent(jobId)}`),
+  getBoardLast: (universe: string) =>
+    request<{ ok: boolean; data: SignalBoard | null }>(
+      `/api/desk/board/last?universe=${encodeURIComponent(universe)}`,
+    ),
+  getBoardReplay: (universe = "core") =>
+    request<{ ok: boolean; data: HistoryTest | null }>(
+      `/api/desk/board/replay?universe=${encodeURIComponent(universe)}`,
+    ),
+  postBoardReplay: (universe = "core") =>
+    request<{ ok: boolean; job_id: string }>("/api/desk/board/replay", {
+      method: "POST",
+      body: JSON.stringify({ universe }),
     }),
   postDeskQuickSignal: (body: {
     symbol: string;

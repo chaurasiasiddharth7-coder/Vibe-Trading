@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import { Activity, Loader2, Target, ShieldAlert } from "lucide-react";
+import { Activity, Loader2, ShieldAlert } from "lucide-react";
 import { DeskChart, type DeskCandle } from "@/components/desk/DeskChart";
-import { api, type AnalysisPayload as ApiAnalysis, type KronosForecastPayload } from "@/lib/api";
+import { BoardColumns, EvidencePanel, TrustStrip } from "@/components/desk/SignalBoard";
+import {
+  api,
+  type AnalysisPayload as ApiAnalysis,
+  type BoardRow,
+  type KronosForecastPayload,
+  type SignalBoard,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-const WATCHLIST = ["RELIANCE", "TCS", "HDFCBANK", "TMPV", "INFY"];
+const boardRows = (b: SignalBoard | null): BoardRow[] => b?.rows ?? [];
 
 type TradePlan = {
   action: string;
@@ -60,7 +67,9 @@ const toView = (data: ApiAnalysis): AnalysisView => ({
   chart_data: data.chart_data,
 });
 
-export function Desk() {
+export function Desk({ embedded = false }: { embedded?: boolean } = {}) {
+  const Shell = embedded ? "div" : "main";
+  const Heading = embedded ? "h2" : "h1";
   const [symbol, setSymbol] = useState("RELIANCE");
   const [custom, setCustom] = useState("");
   const [loading, setLoading] = useState(false);
@@ -73,7 +82,9 @@ export function Desk() {
   const [paperBusy, setPaperBusy] = useState(false);
   const [paperMsg, setPaperMsg] = useState<string | null>(null);
   const [arenaVotes, setArenaVotes] = useState<Array<Record<string, unknown>> | null>(null);
-  const [pmPlan, setPmPlan] = useState<Record<string, unknown> | null>(null);
+  const [board, setBoard] = useState<SignalBoard | null>(null);
+  const [boardBusy, setBoardBusy] = useState(false);
+  const [row, setRow] = useState<BoardRow | null>(null);
   const [scorecard, setScorecard] = useState<Array<Record<string, unknown>> | null>(null);
   const [targetNet, setTargetNet] = useState("1500000");
   const [brLevels, setBrLevels] = useState<Array<{ price: number; name: string; color?: string }>>([]);
@@ -103,6 +114,36 @@ export function Desk() {
     }
   }, []);
 
+  const scanBoard = useCallback(async () => {
+    setBoardBusy(true);
+    setError(null);
+    try {
+      const res = await api.postDeskBoard();
+      setBoard(res.data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBoardBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!embedded) {
+      void scanBoard();
+      return;
+    }
+    // Inside the dashboard: show the last saved check instead of starting a
+    // slow scan on every visit. The user presses "Check again" for a fresh one.
+    let alive = true;
+    api
+      .getBoardLast("core")
+      .then((r) => alive && r?.data && setBoard(r.data))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [scanBoard, embedded]);
+
   const load = useCallback(async (ticker: string) => {
     setLoading(true);
     setError(null);
@@ -115,28 +156,8 @@ export function Desk() {
         api.getAlphadeskAnalysis(ticker),
         api.getKronosForecast(ticker).catch(() => null),
       ]);
-      const view = toView(a.data);
-      setAnalysis(view);
+      setAnalysis(toView(a.data));
       setKronos(k?.data ?? null);
-      void refreshSurvival();
-      // Auto mentor call: action + entry + exit without waiting for Arena click
-      try {
-        const qs = await api.postDeskQuickSignal({
-          symbol: view.symbol,
-          analysis: {
-            current_price: view.current_price,
-            metrics: view.metrics,
-          },
-          kronos: k?.data
-            ? { kronos_projection: k.data.kronos_projection }
-            : undefined,
-        });
-        setTradePlan(qs.plan as TradePlan);
-        setSignalId(qs.signal_id ?? null);
-      } catch (qe) {
-        // Non-fatal — user can still Run Arena
-        console.warn("quick-signal failed", qe);
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setAnalysis(null);
@@ -144,11 +165,32 @@ export function Desk() {
     } finally {
       setLoading(false);
     }
-  }, [refreshSurvival]);
+  }, []);
 
   useEffect(() => {
     void load(symbol);
   }, [symbol, load]);
+
+  // Evidence for the selected symbol: from the board, or a one-name scan.
+  useEffect(() => {
+    const hit = boardRows(board).find((r) => r.symbol === symbol);
+    if (hit) {
+      setRow(hit);
+      return;
+    }
+    setRow(null);
+    if (!board) return;
+    let live = true;
+    void api
+      .postDeskBoard({ symbols: [symbol] })
+      .then((res) => {
+        if (live) setRow(boardRows(res.data)[0] ?? null);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [board, symbol]);
 
   const handleSelect = (s: string) => {
     setSymbol(s);
@@ -190,24 +232,6 @@ export function Desk() {
       setBrLevels(lv.filter((x) => x.price > 0));
       void refreshSurvival();
       void refreshLive();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setCommitteeBusy(false);
-    }
-  };
-
-  const handlePmPlan = async () => {
-    setError(null);
-    setCommitteeBusy(true);
-    try {
-      // Full mentor universe (stocks + ETFs) — do not limit to 5 Desk chips
-      const res = await api.postPmPlan({
-        target_net: Number(targetNet) || 0,
-        full_universe: true,
-        include_etfs: true,
-      });
-      setPmPlan(res.plan);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -444,66 +468,41 @@ export function Desk() {
   }, [refreshLive]);
 
   return (
-    <main className="min-h-[calc(100vh-2rem)] p-6 space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+    <Shell className={embedded ? "space-y-5" : "min-h-[calc(100vh-2rem)] p-6 space-y-5"}>
+      <header className={cn("flex flex-wrap items-end justify-between gap-4 pb-4", !embedded && "border-b border-border")}>
+        <div className={embedded ? "sr-only" : undefined}>
+          <Heading className="text-2xl font-semibold tracking-tight flex items-center gap-2">
             <Activity className="h-6 w-6 text-emerald-500" />
             AlphaDesk India
-            <span className="text-[10px] font-mono uppercase tracking-wider border border-emerald-700/40 text-emerald-400 px-2 py-0.5 rounded">
-              NSE/BSE
-            </span>
-          </h1>
+          </Heading>
           <p className="text-sm text-muted-foreground">
-            PM hygiene + Arena (PM vs Debate) · paper sleeves · survival scorecard
+            What looks worth buying, what might fall, and what to stay away from today. Practice with fake money before using real money.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
           <input
-            value={targetNet}
-            onChange={(e) => setTargetNet(e.target.value)}
-            className="h-8 w-28 rounded-md border border-border bg-background px-2 text-xs font-mono"
-            aria-label="Liquidity target net INR"
-            title="Liquidity target (net INR)"
-          />
-          <button
-            type="button"
-            onClick={() => void handlePmPlan()}
-            disabled={committeeBusy}
-            className="h-8 px-3 rounded-md text-xs border border-border hover:bg-muted disabled:opacity-50"
-            title="Scan watchlist for horizon-bucketed ideas"
-          >
-            {committeeBusy ? "Scanning…" : "PM Plan"}
-          </button>
-          {WATCHLIST.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => handleSelect(s)}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-xs font-semibold tracking-wide border transition",
-                symbol === s
-                  ? "bg-emerald-600 text-white border-emerald-600"
-                  : "bg-background border-border hover:bg-muted",
-              )}
-            >
-              {s}
-            </button>
-          ))}
-          <input
             value={custom}
             onChange={(e) => setCustom(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleCustom()}
-            placeholder="Symbol"
-            className="h-8 w-28 rounded-md border border-border bg-background px-2 text-xs"
-            aria-label="Custom symbol"
+            placeholder="Any stock, e.g. TCS"
+            className="h-9 w-36 rounded-md border border-border bg-background px-2 text-xs"
+            aria-label="Look up symbol"
           />
           <button
             type="button"
             onClick={handleCustom}
-            className="h-8 px-3 rounded-md text-xs border border-border hover:bg-muted"
+            className="h-9 px-3 rounded-md text-xs border border-border hover:bg-muted"
           >
-            Go
+            Look up
+          </button>
+          <button
+            type="button"
+            onClick={() => void scanBoard()}
+            disabled={boardBusy}
+            className="h-9 px-3 rounded-md text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            {boardBusy && <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />}
+            {boardBusy ? "Checking…" : "Check again"}
           </button>
         </div>
       </header>
@@ -514,211 +513,149 @@ export function Desk() {
         </div>
       )}
 
-      {loading && (
-        <div className="flex items-center gap-2 text-muted-foreground text-sm">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading analysis…
-        </div>
+      {board ? (
+        <>
+          <TrustStrip board={board} />
+          <BoardColumns board={board} selected={symbol} onSelect={handleSelect} />
+        </>
+      ) : (
+        (boardBusy || embedded) && (
+          <p className="text-sm text-muted-foreground">
+            {boardBusy
+              ? "Checking about 37 stocks and funds. The first check of the day runs the AI forecast too and can take a few minutes."
+              : "No saved check yet. Press Check again to scan about 37 stocks and funds (the first check of the day can take a few minutes)."}
+          </p>
+        )
       )}
 
-      {analysis && !loading && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
-            <div className="flex justify-between items-end rounded-lg border border-border bg-card/40 p-4">
-              <div>
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6" aria-label="Selected symbol">
+        <div className="lg:col-span-2 space-y-3">
+          {loading && (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> Loading {symbol}…
+            </div>
+          )}
+          {analysis && !loading && (
+            <>
+              <div className="flex items-baseline gap-3">
                 <h2 className="text-xl font-bold">{analysis.symbol}</h2>
-                <p className="text-2xl font-mono font-semibold text-emerald-400">
-                  ₹{analysis.current_price}
-                  <span
-                    className={cn(
-                      "ml-2 text-sm",
-                      analysis.change_percent >= 0 ? "text-emerald-400" : "text-rose-400",
-                    )}
-                  >
-                    {analysis.change_percent >= 0 ? "+" : ""}
-                    {analysis.change_percent}%
-                  </span>
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-4 text-xs font-mono text-muted-foreground">
-                <div>
-                  RSI: <span className="text-foreground">{analysis.metrics.rsi_14 ?? "—"}</span>
-                </div>
-                <div>
-                  EMA50: <span className="text-foreground">₹{analysis.metrics.ema_50}</span>
-                </div>
-                <div>
-                  SuperTrend:{" "}
-                  <span
-                    className={
-                      analysis.metrics.supertrend === "BULLISH"
-                        ? "text-emerald-400"
-                        : "text-rose-400"
-                    }
-                  >
-                    {analysis.metrics.supertrend}
-                  </span>
-                </div>
-                {kronos && (
-                  <div>
-                    Kronos:{" "}
-                    <span className="text-sky-400">
-                      {kronos.kronos_projection.trajectory_bias}{" "}
-                      {kronos.kronos_projection.expected_change_percent}%
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <DeskChart
-              historical={analysis.chart_data}
-              forecast={kronos?.forecast_data}
-              target={tradePlan?.target_price}
-              stopLoss={tradePlan?.stop_loss}
-              levels={brLevels}
-            />
-          </div>
-
-          <div className="space-y-4">
-            <div className="rounded-lg border border-border bg-card/40 p-5 space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">
-                  AI Signal Call
+                <span className="text-xl font-mono">₹{analysis.current_price}</span>
+                <span
+                  className={cn(
+                    "text-sm font-mono",
+                    analysis.change_percent >= 0 ? "text-emerald-400" : "text-rose-400",
+                  )}
+                >
+                  {analysis.change_percent >= 0 ? "+" : ""}
+                  {analysis.change_percent}%
                 </span>
-                {tradePlan ? (
-                  <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold rounded-full">
-                    {tradePlan.action} · {tradePlan.confidence_score}%
-                  </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">No plan yet</span>
-                )}
               </div>
-
-              {tradePlan ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-background p-3 rounded border border-border col-span-2">
-                      <span className="text-muted-foreground text-xs block">Entry</span>
-                      <span className="font-mono font-bold text-sm">
-                        {tradePlan.entry_range || "—"}
-                      </span>
-                    </div>
-                    <div className="bg-background p-3 rounded border border-border">
-                      <span className="text-muted-foreground text-xs flex items-center gap-1">
-                        <Target className="h-3 w-3" /> Target (exit)
-                      </span>
-                      <span className="text-emerald-400 font-mono font-bold text-lg">
-                        ₹{tradePlan.target_price}
-                      </span>
-                    </div>
-                    <div className="bg-background p-3 rounded border border-border">
-                      <span className="text-muted-foreground text-xs flex items-center gap-1">
-                        <ShieldAlert className="h-3 w-3" /> Stop
-                      </span>
-                      <span className="text-rose-400 font-mono font-bold text-lg">
-                        ₹{tradePlan.stop_loss}
-                      </span>
-                    </div>
-                    <div className="bg-background p-3 rounded border border-border">
-                      <span className="text-muted-foreground text-xs block">R / R</span>
-                      <span className="font-mono font-bold">{tradePlan.risk_reward_ratio}</span>
-                    </div>
-                    <div className="bg-background p-3 rounded border border-border">
-                      <span className="text-muted-foreground text-xs block">Horizon</span>
-                      <span className="font-mono font-bold text-sm">
-                        {tradePlan.holding_horizon || "—"}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed bg-background p-3 rounded border border-border">
-                    {tradePlan.executive_summary}
-                  </p>
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Loading auto signal… Arena / Committee refine when you want a deeper call.
-                </p>
-              )}
-
-              {arenaVotes && (
-                <div className="text-[11px] font-mono space-y-1 border border-border rounded p-2">
-                  {arenaVotes.map((v) => (
-                    <div key={String(v.engine_id)} className="flex justify-between gap-2">
-                      <span>
-                        {String(v.engine_id)} · {String(v.action)}
-                        {v.excluded ? " (DEAD)" : ""}
-                      </span>
-                      <span>{String(v.arena_score)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {analysis.metrics.active_candle_patterns.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {analysis.metrics.active_candle_patterns.map((p) => (
-                    <span key={p} className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded">
-                      {p}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex flex-col gap-2 pt-2">
-                <button
-                  type="button"
-                  disabled={committeeBusy}
-                  onClick={() => void handleRunArena()}
-                  className="h-9 rounded-md bg-sky-600 text-white text-sm font-semibold hover:bg-sky-500 disabled:opacity-50"
-                >
-                  {committeeBusy ? "Arena running…" : "Run Arena (PM vs Debate)"}
-                </button>
-                <button
-                  type="button"
-                  disabled={committeeBusy}
-                  onClick={() => void handleRunCommittee()}
-                  className="h-9 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50"
-                >
-                  {committeeBusy ? "Committee running…" : "Run Committee"}
-                </button>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled={!tradePlan || paperBusy}
-                    onClick={() => void handlePaper("buy")}
-                    className="h-9 rounded-md border border-border text-sm disabled:opacity-50 hover:bg-muted"
-                  >
-                    Paper Buy
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!tradePlan || paperBusy}
-                    onClick={() => void handlePaper("sell")}
-                    className="h-9 rounded-md border border-border text-sm disabled:opacity-50 hover:bg-muted"
-                  >
-                    Paper Sell
-                  </button>
-                </div>
-                {paperMsg && <p className="text-[11px] text-muted-foreground font-mono">{paperMsg}</p>}
-              </div>
-            </div>
-          </div>
+              <DeskChart
+                historical={analysis.chart_data}
+                forecast={kronos?.forecast_data}
+                target={row?.target ?? tradePlan?.target_price}
+                stopLoss={row?.stop ?? tradePlan?.stop_loss}
+                levels={brLevels}
+              />
+            </>
+          )}
         </div>
-      )}
+        <div>
+          {row ? (
+            <EvidencePanel row={row} />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {board ? "Loading the details…" : "Details appear after the check finishes."}
+            </p>
+          )}
+        </div>
+      </section>
 
-      {(scorecard || pmPlan) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <details className="rounded-lg border border-border">
+        <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
+          Advanced tools (for experienced users)
+        </summary>
+        <div className="p-4 pt-0 space-y-4">
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-semibold">Deeper call on {symbol}</span>
+              <input
+                value={targetNet}
+                onChange={(e) => setTargetNet(e.target.value)}
+                className="h-8 w-28 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                aria-label="Liquidity target net INR"
+                title="Liquidity target (net INR)"
+              />
+            </div>
+            {tradePlan && (
+              <div className="text-xs font-mono space-y-1">
+                <p>
+                  {tradePlan.action} · entry {tradePlan.entry_range || "—"} · target ₹
+                  {tradePlan.target_price} · stop ₹{tradePlan.stop_loss}
+                </p>
+                <p className="text-muted-foreground font-sans">{tradePlan.executive_summary}</p>
+              </div>
+            )}
+            {arenaVotes && (
+              <div className="text-[11px] font-mono space-y-1 border border-border rounded p-2">
+                {arenaVotes.map((v) => (
+                  <div key={String(v.engine_id)} className="flex justify-between gap-2">
+                    <span>
+                      {String(v.engine_id)} · {String(v.action)}
+                      {v.excluded ? " (DEAD)" : ""}
+                    </span>
+                    <span>{String(v.arena_score)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={committeeBusy || !analysis}
+                onClick={() => void handleRunArena()}
+                className="h-9 px-3 rounded-md bg-sky-600 text-white text-xs font-semibold hover:bg-sky-500 disabled:opacity-50"
+              >
+                {committeeBusy ? "Running…" : "Run Arena"}
+              </button>
+              <button
+                type="button"
+                disabled={committeeBusy || !analysis}
+                onClick={() => void handleRunCommittee()}
+                className="h-9 px-3 rounded-md border border-border text-xs hover:bg-muted disabled:opacity-50"
+              >
+                Run Committee (LLM, slow)
+              </button>
+              <button
+                type="button"
+                disabled={!tradePlan || paperBusy}
+                onClick={() => void handlePaper("buy")}
+                className="h-9 px-3 rounded-md border border-border text-xs disabled:opacity-50 hover:bg-muted"
+              >
+                Paper Buy
+              </button>
+              <button
+                type="button"
+                disabled={!tradePlan || paperBusy}
+                onClick={() => void handlePaper("sell")}
+                className="h-9 px-3 rounded-md border border-border text-xs disabled:opacity-50 hover:bg-muted"
+              >
+                Paper Sell
+              </button>
+            </div>
+            {paperMsg && <p className="text-[11px] text-muted-foreground font-mono">{paperMsg}</p>}
+          </div>
+
           {scorecard && (
             <div className="rounded-lg border border-border p-4 space-y-2">
               <h3 className="text-sm font-semibold flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4" /> Survival scorecard
+                <ShieldAlert className="h-4 w-4" /> Engine scorecard
               </h3>
               <div className="text-[11px] font-mono space-y-1">
                 {scorecard.map((e) => (
                   <div key={String(e.engine_id)} className="flex justify-between gap-2">
                     <span>
-                      {String(e.engine_id)} · {String(e.status)} · sleeve ₹
-                      {Number(e.sleeve_inr ?? 0).toLocaleString("en-IN")}
+                      {String(e.engine_id)} · {String(e.status)}
                     </span>
                     <span>
                       N={String(e.closed_trades)} E[R]=
@@ -729,198 +666,6 @@ export function Desk() {
               </div>
             </div>
           )}
-          {pmPlan && (
-            <div className="rounded-lg border border-border p-4 space-y-2">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Target className="h-4 w-4" /> PM hygiene
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                Names {String(pmPlan.name_count)} · exits {String(pmPlan.hygiene_exits)} · raised net ₹
-                {Number(pmPlan.raised_net ?? 0).toLocaleString("en-IN")}
-              </p>
-              <ul className="text-[11px] font-mono max-h-32 overflow-auto space-y-0.5">
-                {Array.isArray(pmPlan.proposals) &&
-                  (pmPlan.proposals as Array<Record<string, unknown>>).slice(0, 8).map((p, i) => (
-                    <li key={`${String(p.symbol)}-${i}`}>
-                      {String(p.action)} {String(p.symbol)} · ₹{Number(p.net ?? 0).toLocaleString("en-IN")}
-                    </li>
-                  ))}
-                {(!Array.isArray(pmPlan.proposals) || pmPlan.proposals.length === 0) && (
-                  <li className="text-muted-foreground">No hygiene exits — mentor scan below.</li>
-                )}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      {pmPlan && typeof pmPlan.opportunities === "object" && pmPlan.opportunities !== null && (
-        <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/10 p-4 space-y-4">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Target className="h-4 w-4 text-emerald-500" />
-            Mentor plan — where to put money
-          </h3>
-          {(() => {
-            const opp = pmPlan.opportunities as Record<string, unknown>;
-            const alloc = opp.allocation as Record<string, unknown> | undefined;
-            const sleeves = Array.isArray(alloc?.sleeves)
-              ? (alloc.sleeves as Array<Record<string, unknown>>)
-              : [];
-            const mfPlay = Array.isArray(alloc?.mf_playbook)
-              ? (alloc.mf_playbook as Array<Record<string, unknown>>)
-              : [];
-            const stockBuys = Array.isArray(opp.top_stock_buys)
-              ? (opp.top_stock_buys as Array<Record<string, unknown>>)
-              : [];
-            const fundBuys = Array.isArray(opp.top_fund_etf_buys)
-              ? (opp.top_fund_etf_buys as Array<Record<string, unknown>>)
-              : [];
-            const buckets = opp.buckets as
-              | Record<string, Array<Record<string, unknown>>>
-              | undefined;
-            return (
-              <>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {String(opp.mentor_brief ?? "")}
-                  {opp.universe_n != null ? ` · scanned ${String(opp.universe_n)} names` : ""}
-                </p>
-                {sleeves.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                      Suggested allocation
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-                      {sleeves.map((s) => (
-                        <div
-                          key={String(s.sleeve)}
-                          className="rounded border border-border bg-background/60 p-2 text-[11px]"
-                        >
-                          <div className="font-semibold">{String(s.pct)}% · {String(s.sleeve)}</div>
-                          <div className="text-muted-foreground">
-                            {s.inr != null
-                              ? `₹${Number(s.inr).toLocaleString("en-IN")}`
-                              : "—"}
-                          </div>
-                          <div className="text-muted-foreground mt-1">{String(s.note)}</div>
-                        </div>
-                      ))}
-                    </div>
-                    {alloc?.disclaimer != null && (
-                      <p className="text-[10px] text-muted-foreground">{String(alloc.disclaimer)}</p>
-                    )}
-                  </div>
-                )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="rounded border border-border bg-background/60 p-3 space-y-2">
-                    <div className="text-[11px] font-bold uppercase tracking-wider">Best stocks (BUY)</div>
-                    {stockBuys.length === 0 ? (
-                      <p className="text-[11px] text-muted-foreground">No aligned stock BUYs — wait or use ETFs.</p>
-                    ) : (
-                      <ul className="space-y-2">
-                        {stockBuys.slice(0, 6).map((row) => (
-                          <li key={String(row.symbol)} className="text-[11px] font-mono space-y-0.5">
-                            <button
-                              type="button"
-                              className="text-left font-semibold hover:underline"
-                              onClick={() => handleSelect(String(row.symbol))}
-                            >
-                              {String(row.symbol)} · {String(row.horizon)} · {String(row.confidence)}%
-                            </button>
-                            <div className="text-muted-foreground">
-                              entry {String(row.entry_range ?? "—")} · tgt ₹
-                              {Number(row.target_price ?? 0).toFixed(0)} · stop ₹
-                              {Number(row.stop_loss ?? 0).toFixed(0)}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  <div className="rounded border border-border bg-background/60 p-3 space-y-2">
-                    <div className="text-[11px] font-bold uppercase tracking-wider">
-                      Blue-chip / index ETFs &amp; funds
-                    </div>
-                    {fundBuys.length === 0 ? (
-                      <p className="text-[11px] text-muted-foreground">
-                        No tactical ETF BUY — still SIP NIFTYBEES / Sensex as core.
-                      </p>
-                    ) : (
-                      <ul className="space-y-2">
-                        {fundBuys.slice(0, 6).map((row) => (
-                          <li key={String(row.symbol)} className="text-[11px] font-mono space-y-0.5">
-                            <button
-                              type="button"
-                              className="text-left font-semibold hover:underline"
-                              onClick={() => handleSelect(String(row.symbol))}
-                            >
-                              {String(row.action)} {String(row.symbol)} · {String(row.asset_class)}
-                            </button>
-                            <div className="text-muted-foreground">{String(row.mentor_note ?? "")}</div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {mfPlay.length > 0 && (
-                      <div className="pt-2 border-t border-border space-y-1">
-                        <div className="text-[10px] font-bold uppercase text-muted-foreground">
-                          Open-ended MF SIP playbook
-                        </div>
-                        {mfPlay.map((m) => (
-                          <div key={String(m.category)} className="text-[10px] text-muted-foreground">
-                            <span className="text-foreground font-medium">{String(m.category)}</span>
-                            {" — "}
-                            {String(m.why)} ({String(m.horizon)})
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                  {(["1 week", "1 month", "3 months", "6 months+"] as const).map((bucket) => {
-                    const list = buckets?.[bucket] ?? [];
-                    return (
-                      <div key={bucket} className="rounded border border-border bg-background/60 p-3 space-y-2">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                          {bucket}
-                        </div>
-                        {list.length === 0 ? (
-                          <p className="text-[11px] text-muted-foreground">No BUY setups</p>
-                        ) : (
-                          <ul className="space-y-2">
-                            {list.map((row) => (
-                              <li key={String(row.symbol)} className="text-[11px] font-mono space-y-0.5">
-                                <button
-                                  type="button"
-                                  className="text-left font-semibold text-foreground hover:underline"
-                                  onClick={() => handleSelect(String(row.symbol))}
-                                >
-                                  {String(row.action)} {String(row.symbol)} · {String(row.confidence)}%
-                                </button>
-                                <div className="text-muted-foreground">
-                                  entry {String(row.entry_range ?? "—")}
-                                </div>
-                                <div>
-                                  tgt ₹{Number(row.target_price ?? 0).toFixed(0)} · stop ₹
-                                  {Number(row.stop_loss ?? 0).toFixed(0)}
-                                  {row.suggested_inr != null
-                                    ? ` · ~₹${Number(row.suggested_inr).toLocaleString("en-IN")}`
-                                    : ""}
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            );
-          })()}
-        </div>
-      )}
-
       <div className="rounded-lg border border-amber-700/40 bg-amber-950/10 p-4 space-y-3">
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <ShieldAlert className="h-4 w-4 text-amber-500" />
@@ -1098,6 +843,8 @@ export function Desk() {
           </button>
         </div>
       </div>
-    </main>
+        </div>
+      </details>
+    </Shell>
   );
 }

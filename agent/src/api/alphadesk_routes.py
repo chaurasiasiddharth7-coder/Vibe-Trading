@@ -44,12 +44,18 @@ def register_alphadesk_routes(
         bypass_cache: bool = Query(False),
     ) -> dict[str, Any]:
         """Structured TA + candlestick payload for an NSE/BSE symbol."""
-        from src.alphadesk.cache import get_cached, set_cached
+        from src.alphadesk.cache import PRICE_MAX_AGE_S, get_cached, set_cached
 
         try:
             normalize_india_symbol(symbol)
             if not bypass_cache:
-                cached = get_cached("analysis", symbol, interval=interval, period=period)
+                cached = get_cached(
+                    "analysis",
+                    symbol,
+                    max_age_s=PRICE_MAX_AGE_S,
+                    interval=interval,
+                    period=period,
+                )
                 if cached is not None:
                     return {"ok": True, "data": cached, "cached": True}
             payload = analyze_symbol(symbol, period=period, interval=interval)
@@ -443,6 +449,160 @@ def register_alphadesk_routes(
 
         plan = {**plan, "opportunities": opportunities}
         return {"ok": True, "plan": plan}
+
+    @app.post("/api/desk/board", dependencies=[Depends(require_auth)])
+    def post_signal_board(body: dict[str, Any]) -> dict[str, Any]:
+        """Ranked long / short / steer-clear board with evidence and track record."""
+        from src.alphadesk.signal_board import build_board
+
+        from src.alphadesk.board_paper import settle_open_trades
+
+        symbols = body.get("symbols")
+        if not isinstance(symbols, list):
+            symbols = None
+        try:
+            settled = settle_open_trades()
+        except Exception:
+            logger.exception("board paper settle failed")
+            settled = []
+        board = build_board(symbols, with_kronos=bool(body.get("with_kronos", True)))
+        return {"ok": True, "data": {**board, "just_closed": settled}}
+
+    @app.get("/api/desk/board/paper", dependencies=[Depends(require_auth)])
+    def get_board_paper() -> dict[str, Any]:
+        from src.alphadesk.board_paper import list_trades, with_live_prices
+        from src.alphadesk.signal_board import track_record
+
+        return {
+            "ok": True,
+            "trades": with_live_prices(list_trades()),
+            "track_record": track_record(),
+        }
+
+    @app.post("/api/desk/board/paper", dependencies=[Depends(require_auth)])
+    def post_board_paper(body: dict[str, Any]) -> dict[str, Any]:
+        """Open a paper trade for one symbol using the board's own fresh levels."""
+        from src.alphadesk.board_paper import DEFAULT_RISK_INR, open_trade
+        from src.alphadesk.signal_board import build_board
+
+        symbol = str(body.get("symbol") or "").strip().upper()
+        if not symbol:
+            raise HTTPException(status_code=400, detail="symbol required")
+        risk_inr = float(body.get("risk_inr") or DEFAULT_RISK_INR)
+        if not 0 < risk_inr <= 100000:
+            raise HTTPException(status_code=400, detail="risk_inr must be between 0 and 100000")
+        members = [{"symbol": symbol, "name": body.get("name") or symbol, "industry": body.get("industry") or ""}]
+        rows = build_board(members=members, universe_key=str(body.get("universe") or "core")).get("rows") or []
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"no data for {symbol}")
+        try:
+            trade = open_trade(rows[0], risk_inr=risk_inr, plan=str(body.get("plan") or "fixed"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"ok": True, "trade": trade}
+
+    @app.post("/api/desk/board/paper/{trade_id}/plan", dependencies=[Depends(require_auth)])
+    def post_board_paper_plan(trade_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Change an open practice trade's exit style (applies from the next session)."""
+        from src.alphadesk.board_paper import set_plan, with_live_prices
+
+        try:
+            trade = set_plan(trade_id, str(body.get("plan") or ""))
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="trade not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"ok": True, "trade": with_live_prices([trade])[0]}
+
+    @app.post("/api/desk/board/paper/{trade_id}/stop", dependencies=[Depends(require_auth)])
+    def post_board_paper_stop(trade_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Tighten an open practice trade's cut-loss by hand."""
+        from src.alphadesk.board_paper import set_stop, with_live_prices
+
+        try:
+            price = float(body.get("price"))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="price required") from exc
+        try:
+            trade = set_stop(trade_id, price)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="trade not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"ok": True, "trade": with_live_prices([trade])[0]}
+
+    @app.post("/api/desk/board/paper/{trade_id}/exit", dependencies=[Depends(require_auth)])
+    def post_board_paper_exit(trade_id: str) -> dict[str, Any]:
+        """Close an open practice trade now at the latest price."""
+        from src.alphadesk.board_paper import exit_now, with_live_prices
+        from src.alphadesk.signal_board import track_record
+
+        try:
+            trade = exit_now(trade_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="trade not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"ok": True, "trade": with_live_prices([trade])[0], "track_record": track_record()}
+
+    @app.post("/api/desk/board/settle", dependencies=[Depends(require_auth)])
+    def post_board_settle() -> dict[str, Any]:
+        from src.alphadesk.board_paper import settle_open_trades
+        from src.alphadesk.signal_board import track_record
+
+        closed = settle_open_trades()
+        return {"ok": True, "closed": closed, "track_record": track_record()}
+
+    @app.get("/api/desk/universes", dependencies=[Depends(require_auth)])
+    def get_universes() -> dict[str, Any]:
+        from src.alphadesk.index_lists import catalogue
+
+        return {"ok": True, "data": catalogue()}
+
+    def _universe(value: Any) -> str:
+        from src.alphadesk.index_lists import UNIVERSES
+
+        key = str(value or "core")
+        if key not in UNIVERSES:
+            raise HTTPException(status_code=400, detail=f"unknown universe {key!r}")
+        return key
+
+    @app.post("/api/desk/board/scan", dependencies=[Depends(require_auth)])
+    def post_board_scan(body: dict[str, Any]) -> dict[str, Any]:
+        """Start a background scan of a universe; poll /api/desk/board/jobs/{id}."""
+        from src.alphadesk.board_jobs import start_scan
+
+        key = _universe(body.get("universe"))
+        job_id = start_scan(key, include_funds=bool(body.get("include_funds", True)))
+        return {"ok": True, "job_id": job_id}
+
+    @app.get("/api/desk/board/jobs/{job_id}", dependencies=[Depends(require_auth)])
+    def get_board_job(job_id: str) -> dict[str, Any]:
+        from src.alphadesk.board_jobs import status
+
+        job = status(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="job not found (API restarted?)")
+        return {"ok": True, "job": job}
+
+    @app.get("/api/desk/board/last", dependencies=[Depends(require_auth)])
+    def get_board_last(universe: str = Query("core", max_length=32)) -> dict[str, Any]:
+        from src.alphadesk.board_jobs import load_last
+
+        return {"ok": True, "data": load_last(_universe(universe))}
+
+    @app.get("/api/desk/board/replay", dependencies=[Depends(require_auth)])
+    def get_board_replay(universe: str = Query("core", max_length=32)) -> dict[str, Any]:
+        from src.alphadesk.board_replay import load_replay
+
+        return {"ok": True, "data": load_replay(_universe(universe))}
+
+    @app.post("/api/desk/board/replay", dependencies=[Depends(require_auth)])
+    def post_board_replay(body: dict[str, Any]) -> dict[str, Any]:
+        """Start a background past test for a universe."""
+        from src.alphadesk.board_jobs import start_replay
+
+        return {"ok": True, "job_id": start_replay(_universe(body.get("universe")))}
 
     @app.post("/api/desk/quick-signal", dependencies=[Depends(require_auth)])
     async def post_quick_signal(body: dict[str, Any]) -> dict[str, Any]:

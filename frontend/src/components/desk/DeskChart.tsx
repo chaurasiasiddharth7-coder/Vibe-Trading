@@ -8,12 +8,14 @@ export interface DeskCandle {
   high: number;
   low: number;
   close: number;
+  volume?: number;
 }
 
 interface LevelMark {
   price: number;
   name: string;
   color?: string;
+  dashed?: boolean;
 }
 
 interface Props {
@@ -23,6 +25,26 @@ interface Props {
   stopLoss?: number | null;
   levels?: LevelMark[];
   height?: number;
+  /** Draw the 20 and 50-day average lines. */
+  averages?: boolean;
+  /** Draw a volume strip under the candles (needs volume on the candles). */
+  showVolume?: boolean;
+  /** Small spaces: hide the legend and level labels (the panel beside the chart lists them). */
+  quiet?: boolean;
+  /** Label for a pattern on the latest candle, e.g. "Hammer". */
+  patternMark?: { label: string; direction: "bull" | "bear" | "neutral" } | null;
+}
+
+function emaSeries(values: number[], period: number): Array<number | null> {
+  const k = 2 / (period + 1);
+  const out: Array<number | null> = [];
+  let prev: number | null = null;
+  values.forEach((v, i) => {
+    if (i < period - 1) return void out.push(null);
+    prev = prev == null ? values.slice(0, period).reduce((a, b) => a + b, 0) / period : v * k + prev * (1 - k);
+    out.push(Math.round(prev * 100) / 100);
+  });
+  return out;
 }
 
 export function DeskChart({
@@ -32,6 +54,10 @@ export function DeskChart({
   stopLoss = null,
   levels = [],
   height = 420,
+  averages = false,
+  showVolume = false,
+  quiet = false,
+  patternMark = null,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof echarts.init> | null>(null);
@@ -59,7 +85,8 @@ export function DeskChart({
       return f ? f.close : null;
     });
 
-    const markLineData: Array<{ yAxis: number; name: string; lineStyle: { color: string } }> = [];
+    const vol = showVolume && historical.every((c) => typeof c.volume === "number");
+    const markLineData: Array<{ yAxis: number; name: string; lineStyle: { color: string; type?: string }; label?: { position: string; fontSize: number; show?: boolean } }> = [];
     if (target != null) {
       markLineData.push({ yAxis: target, name: "AI TARGET", lineStyle: { color: "#22c55e" } });
     }
@@ -70,7 +97,9 @@ export function DeskChart({
       markLineData.push({
         yAxis: lv.price,
         name: lv.name,
-        lineStyle: { color: lv.color || "#38bdf8" },
+        lineStyle: { color: lv.color || "#38bdf8", type: lv.dashed ? "dashed" : "solid" },
+        // Support and resistance labels sit on the left so they don't pile up with stop and target on the right.
+        ...(lv.dashed ? { label: { position: "insideStartTop", fontSize: 10, show: !quiet } } : {}),
       });
     }
 
@@ -78,22 +107,56 @@ export function DeskChart({
       backgroundColor: "transparent",
       animation: false,
       legend: {
-        data: ["OHLC", "Kronos"],
+        show: !quiet,
+        data: averages ? ["OHLC", "Kronos", "EMA 20", "EMA 50"] : ["OHLC", "Kronos"],
+        top: 0,
         textStyle: { color: dark ? "#a1a1aa" : "#52525b" },
       },
-      grid: { left: 56, right: 24, top: 36, bottom: 32 },
-      xAxis: {
-        type: "category",
-        data: allDates,
-        axisLabel: { color: dark ? "#71717a" : "#a1a1aa", hideOverlap: true },
-        axisLine: { lineStyle: { color: dark ? "#27272a" : "#e4e4e7" } },
-      },
-      yAxis: {
-        scale: true,
-        axisLabel: { color: dark ? "#71717a" : "#a1a1aa" },
-        splitLine: { lineStyle: { color: dark ? "#18181b" : "#f4f4f5" } },
-      },
-      tooltip: { trigger: "axis" },
+      grid: vol
+        ? [
+            { left: 56, right: 24, top: quiet ? 12 : 36, bottom: 96 },
+            { left: 56, right: 24, height: 48, bottom: 30 },
+          ]
+        : { left: 56, right: 24, top: 36, bottom: 32 },
+      xAxis: [
+        {
+          type: "category",
+          data: allDates,
+          axisLabel: { color: dark ? "#71717a" : "#a1a1aa", hideOverlap: true, show: !vol },
+          axisLine: { lineStyle: { color: dark ? "#27272a" : "#e4e4e7" } },
+        },
+        ...(vol
+          ? [
+              {
+                type: "category" as const,
+                gridIndex: 1,
+                data: allDates,
+                axisLabel: { color: dark ? "#71717a" : "#a1a1aa", hideOverlap: true },
+                axisLine: { lineStyle: { color: dark ? "#27272a" : "#e4e4e7" } },
+              },
+            ]
+          : []),
+      ],
+      yAxis: [
+        {
+          scale: true,
+          axisLabel: { color: dark ? "#71717a" : "#a1a1aa" },
+          splitLine: { lineStyle: { color: dark ? "#18181b" : "#f4f4f5" } },
+        },
+        ...(vol
+          ? [
+              {
+                gridIndex: 1,
+                splitNumber: 2,
+                axisLabel: { show: false },
+                axisLine: { show: false },
+                axisTick: { show: false },
+                splitLine: { show: false },
+              },
+            ]
+          : []),
+      ],
+      tooltip: { trigger: "axis", axisPointer: { link: [{ xAxisIndex: "all" }] } },
       series: [
         {
           name: "OHLC",
@@ -108,6 +171,17 @@ export function DeskChart({
             borderColor: "#22c55e",
             borderColor0: "#ef4444",
           },
+          markPoint: patternMark
+            ? {
+                symbol: "pin",
+                symbolSize: 42,
+                itemStyle: {
+                  color: patternMark.direction === "bull" ? "#22c55e" : patternMark.direction === "bear" ? "#ef4444" : "#a1a1aa",
+                },
+                label: { show: true, formatter: patternMark.label, fontSize: 9, color: "#fff" },
+                data: [{ coord: [lastTime, historical[historical.length - 1].high] }],
+              }
+            : undefined,
           markLine:
             markLineData.length > 0
               ? {
@@ -117,6 +191,33 @@ export function DeskChart({
                 }
               : undefined,
         },
+        ...(vol
+          ? [
+              {
+                name: "Volume",
+                type: "bar" as const,
+                xAxisIndex: 1,
+                yAxisIndex: 1,
+                data: historical.map((c) => ({
+                  value: c.volume ?? 0,
+                  itemStyle: { color: c.close >= c.open ? "rgba(34,197,94,0.55)" : "rgba(239,68,68,0.55)" },
+                })),
+              },
+            ]
+          : []),
+        ...(averages
+          ? [
+              { name: "EMA 20", values: emaSeries(historical.map((c) => c.close), 20), color: "#f59e0b" },
+              { name: "EMA 50", values: emaSeries(historical.map((c) => c.close), 50), color: "#a78bfa" },
+            ].map((e) => ({
+              name: e.name,
+              type: "line" as const,
+              data: [...e.values, ...forecastDates.map(() => null)].slice(0, allDates.length),
+              showSymbol: false,
+              lineStyle: { width: 1.2, color: e.color },
+              connectNulls: false,
+            }))
+          : []),
         {
           name: "Kronos",
           type: "line",
@@ -135,7 +236,7 @@ export function DeskChart({
       chart.dispose();
       chartRef.current = null;
     };
-  }, [historical, forecast, target, stopLoss, levels, dark]);
+  }, [historical, forecast, target, stopLoss, levels, dark, averages, showVolume, quiet, patternMark]);
 
   return <div ref={ref} style={{ width: "100%", height }} className="rounded-lg border border-border" />;
 }

@@ -16,6 +16,9 @@ from src.alphadesk.symbols import normalize_india_symbol
 logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
+# The shared predictor keeps per-call state, so two forecasts at once (a board scan
+# plus a click) corrupt each other. One prediction at a time.
+_PREDICT_LOCK = threading.Lock()
 _PREDICTOR: Any = None
 _LOAD_ERROR: str | None = None
 
@@ -39,6 +42,11 @@ def _ensure_kronos_on_path() -> None:
         )
     if root not in sys.path:
         sys.path.insert(0, root)
+
+
+def _locked_predict(predictor: Any, **kwargs: Any) -> Any:
+    with _PREDICT_LOCK:
+        return predictor.predict(**kwargs)
 
 
 def get_predictor() -> Any:
@@ -124,7 +132,8 @@ def forecast_symbol(
         )
 
     predictor = get_predictor()
-    forecast_df = predictor.predict(
+    forecast_df = _locked_predict(
+        predictor,
         df=x_df,
         x_timestamp=x_timestamp,
         y_timestamp=y_timestamp,

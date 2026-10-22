@@ -11,6 +11,11 @@ from typing import Any
 from src.alphadesk.store import alphadesk_root
 
 
+# Daily bars change all session (and Yahoo finalises the last bar late), so
+# price-derived payloads are reused for at most this long.
+PRICE_MAX_AGE_S = 30 * 60
+
+
 def _cache_dir() -> Path:
     d = alphadesk_root() / "cache"
     d.mkdir(parents=True, exist_ok=True)
@@ -27,7 +32,9 @@ def _key_path(kind: str, symbol: str, **params: Any) -> Path:
     return _cache_dir() / f"{digest}.json"
 
 
-def get_cached(kind: str, symbol: str, **params: Any) -> dict[str, Any] | None:
+def get_cached(
+    kind: str, symbol: str, *, max_age_s: float | None = None, **params: Any
+) -> dict[str, Any] | None:
     path = _key_path(kind, symbol, **params)
     if not path.is_file():
         return None
@@ -35,8 +42,12 @@ def get_cached(kind: str, symbol: str, **params: Any) -> dict[str, Any] | None:
         data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("day") != _day_key():
             return None
+        if max_age_s is not None:
+            cached_at = datetime.fromisoformat(str(data.get("cached_at")))
+            if (datetime.now(timezone.utc) - cached_at).total_seconds() > max_age_s:
+                return None
         return data.get("payload")
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError, ValueError):
         return None
 
 
