@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { Guide } from "@/pages/Guide";
 import { inr, trustSentence } from "@/components/desk/plain";
 import { ApiKeyGate } from "@/components/desk/ApiKeyGate";
+import { ServerConnection } from "@/components/desk/ServerConnection";
+import { DASHBOARD_ONLY } from "@/lib/hosted";
 
 const Desk = lazy(() => import("@/pages/Desk").then((m) => ({ default: m.Desk })));
 
@@ -97,6 +99,7 @@ export function Dashboard() {
       </header>
 
       <ApiKeyGate onNeedsKey={setNeedsKey} />
+      {DASHBOARD_ONLY && params.get("settings") === "1" && <ServerConnection />}
 
       <section aria-label="Summary" className="space-y-3">
         <dl className="grid grid-cols-2 lg:grid-cols-4 gap-3">
