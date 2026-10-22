@@ -1,3 +1,4 @@
+import { DASHBOARD_ONLY } from "@/lib/hosted";
 import { useTranslation } from "react-i18next";
 import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useSearchParams } from "react-router-dom";
@@ -25,6 +26,7 @@ export function Layout() {
     { to: "/settings", icon: Settings, label: t('layout.settings') },
     { to: "/correlation", icon: BarChart3, label: t('layout.correlation') },
   ];
+  const nav = DASHBOARD_ONLY ? NAV.filter((n) => n.to === "/dashboard") : NAV;
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
   const { dark, toggle } = useDarkMode();
@@ -50,6 +52,7 @@ export function Layout() {
   }, [collapsed]);
 
   const loadSessions = () => {
+    if (DASHBOARD_ONLY) return setSessionsLoading(false);
     api.listSessions()
       .then((list) => setSessions(Array.isArray(list) ? list : []))
       .catch(() => {})
@@ -99,7 +102,7 @@ export function Layout() {
 
         {/* Nav */}
         <nav className={cn("space-y-0.5", collapsed ? "p-1" : "p-2")}>
-          {NAV.map(({ to, icon: Icon, label }) => {
+          {nav.map(({ to, icon: Icon, label }) => {
             const text = label;
             return (
               <Link
@@ -122,7 +125,7 @@ export function Layout() {
         </nav>
 
         {/* Sessions — hidden when collapsed */}
-        {!collapsed && (
+        {!collapsed && !DASHBOARD_ONLY && (
           <div className="flex-1 overflow-auto border-t mt-2 flex flex-col">
             <div className="flex items-center justify-between px-4 py-2">
               <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">

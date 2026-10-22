@@ -1,6 +1,7 @@
 import { Suspense, lazy, type ComponentType } from "react";
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
+import { DASHBOARD_ONLY } from "@/lib/hosted";
 
 const Home = lazy(() => import("@/pages/Home").then((m) => ({ default: m.Home })));
 const Agent = lazy(() => import("@/pages/Agent").then((m) => ({ default: m.Agent })));
@@ -43,11 +44,13 @@ function wrap(Component: ComponentType) {
   );
 }
 
+const toDashboard = <Navigate to="/dashboard" replace />;
+
 export const router = createBrowserRouter([
   {
     element: <Layout />,
     children: [
-      { path: "/", element: wrap(Home) },
+      { path: "/", element: DASHBOARD_ONLY ? toDashboard : wrap(Home) },
       { path: "/agent", element: wrap(Agent) },
       { path: "/runtime", element: wrap(Runtime) },
       { path: "/reports", element: wrap(Reports) },
@@ -62,6 +65,7 @@ export const router = createBrowserRouter([
       { path: "/alpha-zoo/bench", element: wrap(AlphaZoo) },
       { path: "/alpha-zoo/compare", element: wrap(AlphaZoo) },
       { path: "/alpha-zoo/:alphaId", element: wrap(AlphaZoo) },
+      ...(DASHBOARD_ONLY ? [{ path: "*", element: toDashboard }] : []),
     ],
   },
 ]);

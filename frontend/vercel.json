@@ -3,9 +3,26 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/desk/:path*", "destination": "https://desk.fairscoreguide.com/api/desk/:path*" },
-    { "source": "/api/analysis/:path*", "destination": "https://desk.fairscoreguide.com/api/analysis/:path*" },
-    { "source": "/api/kronos/:path*", "destination": "https://desk.fairscoreguide.com/api/kronos/:path*" },
-    { "source": "/((?!assets/|api/).*)", "destination": "/index.html" }
-  ]
+    {
+      "source": "/api/desk/:path*",
+      "destination": "https://desk.fairscoreguide.com/api/desk/:path*"
+    },
+    {
+      "source": "/api/analysis/:path*",
+      "destination": "https://desk.fairscoreguide.com/api/analysis/:path*"
+    },
+    {
+      "source": "/api/kronos/:path*",
+      "destination": "https://desk.fairscoreguide.com/api/kronos/:path*"
+    },
+    {
+      "source": "/((?!assets/|api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "build": {
+    "env": {
+      "VITE_DASHBOARD_ONLY": "1"
+    }
+  }
 }

@@ -764,7 +764,7 @@ export function Guide({
         </summary>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="space-y-1 block">
-            <span className="text-sm">Which stocks to check</span>
+            <span className="block text-sm">Which stocks to check</span>
             <select
               value={prefs.universe}
               onChange={(e) => update({ universe: e.target.value, sector: "" })}
@@ -782,7 +782,7 @@ export function Guide({
             </span>
           </label>
           <label className="space-y-1 block">
-            <span className="text-sm">Industry</span>
+            <span className="block text-sm">Industry</span>
             <select
               value={prefs.sector}
               onChange={(e) => update({ sector: e.target.value })}
@@ -797,7 +797,7 @@ export function Guide({
             </select>
           </label>
           <label className="space-y-1 block">
-            <span className="text-sm">Most I'm willing to lose on one trade</span>
+            <span className="block text-sm">Most I'm willing to lose on one trade</span>
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground">₹</span>
               <input
@@ -815,7 +815,7 @@ export function Guide({
           </label>
           <div className="space-y-1 md:col-span-2">
             <label className="space-y-1 block">
-              <span className="text-sm">How to exit trades</span>
+              <span className="block text-sm">How to exit trades</span>
               <select
                 value={prefs.exitPlan}
                 onChange={(e) => update({ exitPlan: e.target.value as ExitPlan })}
@@ -886,7 +886,7 @@ export function Guide({
             )}
           </div>
           <label className="space-y-1 block">
-            <span className="text-sm">Sort ideas by</span>
+            <span className="block text-sm">Sort ideas by</span>
             <select
               value={prefs.sort}
               onChange={(e) => update({ sort: e.target.value as SortKey })}

@@ -46,6 +46,7 @@ export function Dashboard() {
   const [trades, setTrades] = useState<PaperTrade[]>([]);
   const [track, setTrack] = useState<TrackRecord | null>(null);
   const [chartSeen, setChartSeen] = useState(tab === "chart");
+  const [needsKey, setNeedsKey] = useState(false);
   const [welcome, setWelcome] = useState(() => !readDismissed());
   const refs = useRef<Record<Tab, HTMLButtonElement | null>>({ ideas: null, trades: null, chart: null });
 
@@ -95,7 +96,7 @@ export function Dashboard() {
         </p>
       </header>
 
-      <ApiKeyGate />
+      <ApiKeyGate onNeedsKey={setNeedsKey} />
 
       <section aria-label="Summary" className="space-y-3">
         <dl className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -104,7 +105,7 @@ export function Dashboard() {
           <Stat label="Winning now" value={trades.length ? `${trades.filter((t) => resultOf(t) > 0).length} of ${trades.length}` : "—"} />
           <Stat label="Money in open trades" value={open.length ? inr(open.reduce((a, t) => a + t.qty * t.entry, 0), 0) : "—"} />
         </dl>
-        <p className="text-xs text-muted-foreground">{track ? trustSentence(track) : "Loading your track record…"}</p>
+        <p className="text-xs text-muted-foreground">{track ? trustSentence(track) : needsKey ? "Waiting for your server key to load your trades." : "Loading your track record…"}</p>
         {attention.length > 0 && (
           <button
             type="button"
