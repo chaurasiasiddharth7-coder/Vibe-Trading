@@ -254,3 +254,11 @@ def test_suspect_move_flags_big_jumps_inside_window_only():
     assert board_paper.suspect_move(bars, after="d0") == {"date": "d2", "change_pct": -20.8}
     assert board_paper.suspect_move(bars, after="d2") is None
     assert board_paper.suspect_move(bars, after="d0", until="d1") is None
+
+
+def test_list_trades_skips_hidden_and_corrupt_files(tmp_path, monkeypatch):
+    trade = _open(monkeypatch, tmp_path)
+    (tmp_path / "._junk.json").write_bytes(b"\x00\x05\x16\x07\xa3\xff")
+    (tmp_path / "broken.json").write_text("{not json", encoding="utf-8")
+    (tmp_path / "binary.json").write_bytes(b"\xa3\xa3\xa3")
+    assert [t["id"] for t in board_paper.list_trades()] == [trade["id"]]

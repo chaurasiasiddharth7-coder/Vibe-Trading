@@ -240,7 +240,15 @@ def suspect_move(bars: list[dict[str, Any]], *, after: str | None, until: str | 
 
 
 def list_trades() -> list[dict[str, Any]]:
-    out = [json.loads(p.read_text(encoding="utf-8")) for p in _dir().glob("*.json")]
+    out: list[dict[str, Any]] = []
+    for p in _dir().glob("*.json"):
+        if p.name.startswith("."):  # macOS "._x.json" resource-fork files from tar/rsync copies
+            continue
+        try:
+            out.append(json.loads(p.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            # One unreadable file must not take the whole dashboard down.
+            logger.warning("skipping unreadable trade file %s", p.name, exc_info=True)
     out.sort(key=lambda t: t.get("opened_at") or "", reverse=True)
     return out
 
