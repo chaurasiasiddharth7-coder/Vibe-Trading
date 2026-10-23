@@ -13,6 +13,8 @@ import {
 import { cn } from "@/lib/utils";
 import { PracticeTrades } from "@/components/desk/PracticeTrades";
 import { SymbolInsight } from "@/components/desk/SymbolInsight";
+import { ScoreBadge } from "@/components/desk/ScoreBadge";
+import { scoreIdea } from "@/components/desk/score";
 import { JobLostError, friendlyError, pollJob, type Progress } from "@/lib/pollJob";
 import {
   EXIT_PLANS,
@@ -28,7 +30,7 @@ import {
   whatWeSee,
 } from "@/components/desk/plain";
 
-type SortKey = "signal" | "history" | "risk";
+type SortKey = "score" | "signal" | "history" | "risk";
 
 type Prefs = {
   exitPlan: ExitPlan;
@@ -51,7 +53,7 @@ const DEFAULT_PREFS: Prefs = {
   show: { LONG: true, SHORT: true, STEER_CLEAR: true, NO_EDGE: false },
   includeFunds: true,
   provenOnly: false,
-  sort: "signal",
+  sort: "score",
 };
 
 const PREFS_KEY = "alphadesk-guide-prefs";
@@ -69,10 +71,35 @@ const FALLBACK_UNIVERSES = [
 ];
 
 
+/** Score out of 10 for a buy or short idea; -1 for rows that aren't trade ideas. */
+function ideaScore(r: BoardRow): number {
+  if (r.side !== "LONG" && r.side !== "SHORT") return -1;
+  return scoreIdea({
+    side: r.side,
+    votes: r.votes,
+    rsi: r.rsi,
+    kronosPct: r.kronos_change_pct,
+    cautions: r.cautions,
+    stale: r.stale,
+    history: r.history?.symbol_side,
+    sideHistory: r.history?.side,
+  }).score;
+}
+
+const SORT_V2_KEY = "alphadesk-sort-v2";
+
 function loadPrefs(): Prefs {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
-    if (raw) return { ...DEFAULT_PREFS, ...(JSON.parse(raw) as Partial<Prefs>) };
+    if (raw) {
+      const saved = JSON.parse(raw) as Partial<Prefs>;
+      // One-time move to "Highest score first", the new default, for people who still have the old default saved.
+      if (localStorage.getItem(SORT_V2_KEY) !== "1") {
+        localStorage.setItem(SORT_V2_KEY, "1");
+        if (saved.sort === "signal") saved.sort = "score";
+      }
+      return { ...DEFAULT_PREFS, ...saved };
+    }
   } catch {
     // storage unavailable: use defaults
   }
@@ -275,6 +302,22 @@ function IdeaCard({
   const sees = whatWeSee(row);
   const tradeable = row.side === "LONG" || row.side === "SHORT";
   const hs = row.history?.symbol_side;
+  const verdict = useMemo(
+    () =>
+      row.side === "LONG" || row.side === "SHORT"
+        ? scoreIdea({
+            side: row.side,
+            votes: row.votes,
+            rsi: row.rsi,
+            kronosPct: row.kronos_change_pct,
+            cautions: row.cautions,
+            stale: row.stale,
+            history: row.history?.symbol_side,
+            sideHistory: row.history?.side,
+          })
+        : null,
+    [row],
+  );
   return (
     <article className="rounded-lg border border-border p-4 space-y-3 flex flex-col">
       <header className="flex flex-wrap items-start justify-between gap-2">
@@ -317,12 +360,65 @@ function IdeaCard({
       {minimized ? (
         <p className="text-xs text-muted-foreground">
           {tradeable && plan
-            ? `${row.side === "LONG" ? "Buy" : "Short"} ${plan.qty} at ${inr(row.entry)} · gain ${inr(plan.gainIfRight, 0)} / lose ${inr(plan.lossIfWrong, 0)}`
+            ? `${verdict ? `${verdict.score.toFixed(1)}/10 ${verdict.verdict} · ` : ""}${row.side === "LONG" ? "Buy" : "Short"} ${plan.qty} at ${inr(row.entry)} · gain ${inr(plan.gainIfRight, 0)} / lose ${inr(plan.lossIfWrong, 0)}`
             : sees[0]}
         </p>
       ) : (
       <>
+      {tradeable && verdict && (
+        <div className="space-y-2" data-testid="idea-score">
+          <ScoreBadge score={verdict.score} tone={verdict.tone} verdict={verdict.verdict} />
+          <p className="text-xs text-muted-foreground">{verdict.advice}</p>
+          {(verdict.positives.length > 0 || verdict.risks.length > 0) && (
+            <ul className="text-xs space-y-0.5">
+              {verdict.positives.map((t) => (
+                <li key={t} className="text-emerald-300">
+                  <span aria-hidden>✓ </span>
+                  <span className="sr-only">Good: </span>
+                  {t}
+                </li>
+              ))}
+              {verdict.risks.map((t) => (
+                <li key={t} className="text-amber-300">
+                  <span aria-hidden>! </span>
+                  <span className="sr-only">Watch out: </span>
+                  {t}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {!tradeable && <p className="text-sm">{sees[0]}</p>}
+      {tradeable && plan && (
+        <p className="text-sm">
+          {row.side === "LONG" ? "Buy" : "Short"} <span className="font-mono font-semibold">{plan.qty}</span> at{" "}
+          <span className="font-mono">{inr(row.entry)}</span>
+          <span className="text-muted-foreground"> · </span>
+          <span className="text-emerald-400 font-mono">+{inr(plan.gainIfRight, 0)}</span>
+          <span className="text-muted-foreground"> if right, </span>
+          <span className="text-rose-400 font-mono">−{inr(plan.lossIfWrong, 0)}</span>
+          <span className="text-muted-foreground"> if wrong</span>
+        </p>
+      )}
 
+      {tradeable && (
+        <div className="mt-auto pt-1">
+          <button
+            type="button"
+            disabled={openTrade || busy}
+            onClick={() => onPractice(row)}
+            className="min-h-10 w-full rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50 disabled:hover:bg-emerald-600"
+          >
+            {openTrade ? "Practice trade already open" : busy ? "Opening…" : "Practice with fake money"}
+          </button>
+        </div>
+      )}
+      <details className="text-sm rounded-md border border-border">
+        <summary className="cursor-pointer select-none min-h-10 px-3 flex items-center text-xs text-muted-foreground">
+          All the details
+        </summary>
+        <div className="px-3 pb-3 space-y-3">
       <ul className="text-sm space-y-1 list-disc pl-4">
         {sees.slice(0, 2).map((s) => (
           <li key={s}>{s}</li>
@@ -400,18 +496,8 @@ function IdeaCard({
 
       <IdeaAnalysis row={row} openTrade={openTrade} />
 
-      {tradeable && (
-        <div className="mt-auto pt-1">
-          <button
-            type="button"
-            disabled={openTrade || busy}
-            onClick={() => onPractice(row)}
-            className="min-h-10 w-full rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50 disabled:hover:bg-emerald-600"
-          >
-            {openTrade ? "Practice trade already open" : busy ? "Opening…" : "Practice with fake money"}
-          </button>
         </div>
-      )}
+      </details>
       </>
       )}
     </article>
@@ -577,6 +663,7 @@ export function Guide({
     if (q) rows = rows.filter((r) => r.symbol.toLowerCase().includes(q) || (r.name ?? "").toLowerCase().includes(q));
     const order: Record<BoardSide, number> = { LONG: 0, SHORT: 1, STEER_CLEAR: 2, NO_EDGE: 3 };
     const key = (r: BoardRow) => {
+      if (prefs.sort === "score") return -ideaScore(r);
       if (prefs.sort === "history") return -(r.history?.symbol_side?.avg_r ?? -99);
       if (prefs.sort === "risk") return r.risk_pct ?? 99;
       return -Math.abs(r.score);
@@ -898,7 +985,8 @@ export function Guide({
               onChange={(e) => update({ sort: e.target.value as SortKey })}
               className="h-10 w-full max-w-xs rounded-md border border-border bg-background px-3 text-sm"
             >
-              <option value="signal">Strongest signal first</option>
+              <option value="score">Highest score first</option>
+              <option value="signal">Most checks agreeing first</option>
               <option value="history">Best past record first</option>
               <option value="risk">Smallest price swing first</option>
             </select>

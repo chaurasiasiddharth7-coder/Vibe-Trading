@@ -1,4 +1,6 @@
 import { cn } from "@/lib/utils";
+import { ScoreBadge } from "@/components/desk/ScoreBadge";
+import { nowScore, type TradeScore } from "@/components/desk/score";
 import {
   buildSignals,
   describeCandles,
@@ -65,7 +67,11 @@ export function AnalysisPanel({
   srWarnings = [],
   forecast,
   compact = false,
+  scoreSide,
+  entryScore,
 }: {
+  scoreSide?: "LONG" | "SHORT";
+  entryScore?: TradeScore | null;
   sr?: SupportResistance;
   srWarnings?: string[];
   forecast?: ForecastControl;
@@ -85,6 +91,7 @@ export function AnalysisPanel({
   const recent = describeCandles(candles, 3);
   const entry = entryVsNow(votes, rows, forecast?.fresh);
   const asOf = candles.length ? candles[candles.length - 1].time : null;
+  const now = scoreSide ? nowScore(rows, scoreSide) : null;
   const againstTrade =
     side && ((side === "LONG" && t.lean === "bear") || (side === "SHORT" && t.lean === "bull"));
 
@@ -94,6 +101,20 @@ export function AnalysisPanel({
         <h4 className="text-sm font-semibold">What the analysis says</h4>
         {asOf && <span className="text-[11px] text-muted-foreground">Daily candles as of {asOf}</span>}
       </div>
+
+      {now && (
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-2" data-testid="now-score">
+          <ScoreBadge score={now.score} tone={now.tone} verdict={now.verdict} label="Chart score today" />
+          {entryScore && (
+            <div className="text-xs text-muted-foreground">
+              At entry: <span className="font-mono text-foreground">{entryScore.score.toFixed(1)}/10</span> {entryScore.verdict}
+              <span className="block">
+                {now.score > entryScore.score + 0.5 ? "Looking better than when you opened it." : now.score < entryScore.score - 0.5 ? "Looking weaker than when you opened it." : "About the same as when you opened it."}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="space-y-1">
         <div

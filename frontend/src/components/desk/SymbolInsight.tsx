@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { api, type AnalysisPayload, type KronosForecastPayload } from "@/lib/api";
 import { DeskChart } from "@/components/desk/DeskChart";
 import { AnalysisPanel, type ForecastControl } from "@/components/desk/AnalysisPanel";
+import type { TradeScore } from "@/components/desk/score";
 import { levelWarnings, parsePatterns, supportResistance } from "@/components/desk/analysisView";
 import { inr } from "@/components/desk/plain";
 
@@ -28,6 +29,8 @@ export interface InsightProps {
   savedForecastPct?: number | null;
   /** True when the position is already open (the warning note about leaning against it applies). */
   isOpenTrade?: boolean;
+  /** The score this trade had when it was opened, to compare with today. */
+  entryScore?: TradeScore | null;
   compact?: boolean;
   chartHeight?: number;
   children?: ReactNode;
@@ -46,6 +49,7 @@ export function SymbolInsight({
   reasons,
   savedForecastPct = null,
   isOpenTrade = false,
+  entryScore = null,
   compact = false,
   chartHeight = 320,
   children,
@@ -169,6 +173,8 @@ export function SymbolInsight({
             }
             forecast={control}
             compact={compact}
+            scoreSide={side}
+            entryScore={entryScore}
           />
         </>
       ) : (

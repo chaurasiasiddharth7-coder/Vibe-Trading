@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 import type { ExitPlan, PaperTrade } from "@/lib/api";
 import { SymbolInsight } from "@/components/desk/SymbolInsight";
+import { scoreIdea, type TradeScore } from "@/components/desk/score";
 import { cn } from "@/lib/utils";
 import { EXIT_PLANS, historyVerdict, inr, isTrailing, perHundred, planLabel, whatWeSee } from "@/components/desk/plain";
 
@@ -36,6 +37,21 @@ function writeCollapsed(v: boolean) {
 function money(v: number | null | undefined) {
   if (v == null) return "—";
   return `${v >= 0 ? "+" : "−"}${inr(Math.abs(v), 0)}`;
+}
+
+/** The score this trade would have had when it was opened, from the saved snapshot. */
+export function entryScoreOf(t: PaperTrade): TradeScore | null {
+  if (!t.votes) return null;
+  const d = t.decision;
+  return scoreIdea({
+    side: t.side,
+    votes: t.votes,
+    rsi: d?.rsi,
+    kronosPct: d?.kronos_change_pct,
+    cautions: d?.cautions,
+    history: d?.history,
+    sideHistory: d?.side_history,
+  });
 }
 
 function resultOf(t: PaperTrade): number | null {
@@ -530,6 +546,7 @@ function Glance({ t }: { t: PaperTrade }) {
         reasons={t.decision?.reasons}
         savedForecastPct={t.decision?.kronos_change_pct ?? null}
         isOpenTrade={open}
+        entryScore={entryScoreOf(t)}
       >
         <div className="rounded-md border border-border p-3">
           <h4 className="text-sm font-semibold">{open ? "Suggested exit" : "What we learned"}</h4>
@@ -691,9 +708,16 @@ export function PracticeTrades({
                           className="min-h-12 pl-3 pr-2 text-left w-36 sm:w-44 shrink-0 hover:bg-muted/40"
                         >
                           <span className="font-semibold underline decoration-dotted underline-offset-4">{t.symbol}</span>
-                          {t.decision?.name && t.decision.name !== t.symbol && (
-                            <span className="block text-xs text-muted-foreground truncate">{t.decision.name}</span>
-                          )}
+                          {(() => {
+                            const es = entryScoreOf(t);
+                            return (
+                              <span className="block text-xs text-muted-foreground truncate">
+                                {es && <span className="font-mono text-foreground">{es.score.toFixed(1)}/10</span>}
+                                {es && t.decision?.name && t.decision.name !== t.symbol ? " · " : ""}
+                                {t.decision?.name && t.decision.name !== t.symbol ? t.decision.name : ""}
+                              </span>
+                            );
+                          })()}
                         </button>
                         <button
                           type="button"
