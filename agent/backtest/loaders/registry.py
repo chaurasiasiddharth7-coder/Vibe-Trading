@@ -51,6 +51,7 @@ VALID_SOURCES: set[str] = {
     "fmp",
     "qveris",  # QVERIS-INTEGRATION
     "india_broker",
+    "nse_bhavcopy",
     "longbridge",
     "mt5",
     "local",
@@ -100,6 +101,7 @@ def _ensure_registered() -> None:
         "backtest.loaders.fmp_loader",
         "backtest.loaders.qveris_loader",  # QVERIS-INTEGRATION
         "backtest.loaders.india_broker_loader",
+        "backtest.loaders.nse_bhavcopy_loader",
         "backtest.loaders.longbridge",
         "backtest.loaders.mt5_loader",
         "backtest.loaders.local_loader",
@@ -147,7 +149,7 @@ FALLBACK_CHAINS: dict[str, list[str]] = {
     ],
     "us_equity": ["yahoo", "stooq", "sina", "eastmoney", "yfinance", "tiingo", "fmp", "finnhub", "alphavantage", "longbridge", "akshare", "local"],
     "hk_equity": ["eastmoney", "yahoo", "futu", "yfinance", "akshare", "longbridge", "local"],
-    "india_equity": ["yahoo", "yfinance", "india_broker", "local"],
+    "india_equity": ["nse_bhavcopy", "yahoo", "yfinance", "india_broker", "local"],
     # OKX first (native), then dedicated Binance, then generic CCXT / Yahoo.
     "crypto":    ["okx", "binance", "ccxt", "yfinance", "local"],
     "futures":   ["tushare", "akshare", "local"],
@@ -219,6 +221,25 @@ def safe_fetch(
         return {}
 
 
+def _warn_unadjusted_jumps(result: dict[str, Any], source: str) -> None:
+    """Log India bars with a >25% session move: usually an unadjusted bonus/split/demerger.
+
+    Yahoo does not reliably adjust Indian bonuses and demergers, and such fake gaps fire stops and
+    breakouts in a backtest. See ``scripts/nse_pull.py`` for the confirmed-adjustment NSE source.
+    """
+    try:
+        from backtest.loaders.nse_corporate_actions import find_jumps
+
+        for code, frame in result.items():
+            for ts, ret in find_jumps(frame)[:3]:
+                logger.warning(
+                    "%s bars for %s: close moved %+.0f%% on %s - possibly an unadjusted corporate "
+                    "action; consider the nse_bhavcopy source", source, code, ret * 100, ts.date(),
+                )
+    except Exception as exc:  # noqa: BLE001 - diagnostics must never break a fetch
+        logger.debug("jump check skipped: %s", exc)
+
+
 def fetch_chain(
     market: str,
     codes: list[str],
@@ -254,6 +275,8 @@ def fetch_chain(
             loader, codes, start_date, end_date, interval=interval, fields=fields
         )
         if result:
+            if market == "india_equity" and name != "nse_bhavcopy":
+                _warn_unadjusted_jumps(result, name)
             if name != (prefer or ""):
                 logger.info("data chain: %s served %s (%d symbols)", name, market, len(result))
             return result, name
