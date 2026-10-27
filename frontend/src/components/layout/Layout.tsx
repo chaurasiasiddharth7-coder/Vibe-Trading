@@ -23,12 +23,13 @@ export function Layout() {
     { to: "/reports", icon: FileText, label: t('layout.reports') },
     { to: "/alpha-zoo", icon: Layers, label: t('layout.alphaZoo') },
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/intraday", icon: Activity, label: "Intraday" },
     { to: "/settings", icon: Settings, label: t('layout.settings') },
     { to: "/correlation", icon: BarChart3, label: t('layout.correlation') },
   ];
   const nav = DASHBOARD_ONLY
     ? [
-        ...NAV.filter((n) => n.to === "/dashboard"),
+        ...NAV.filter((n) => n.to === "/dashboard" || n.to === "/intraday"),
         // The full Settings page needs server routes the hosted site doesn't have; this opens the dashboard's own settings.
         { to: "/dashboard?settings=1", icon: Settings, label: "Settings" },
       ]

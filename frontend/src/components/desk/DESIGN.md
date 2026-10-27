@@ -101,3 +101,64 @@ One component feeds both the practice-trade glance and the "See the analysis" se
 - AI forecast on demand ("Run fresh forecast"): bypasses the cache, draws the dashed forecast line, replaces the earlier reading and lets "does it still hold" recheck the forecast. Errors are shown in plain words.
 - Compact mode (idea cards): single column, no chart legend or level labels.
 Backend note: Kronos predictions are serialised with a lock because the shared predictor is not safe to call concurrently.
+
+## `/intraday` — Intraday day log (one-glance day dashboard)
+
+Reference: Refero **Mercury** ("Alpine banking at blue hour"), the same reference as the Desk: number-first, restrained, tabular figures. Host Tailwind tokens win for color and type; this section only adds layout and behavior.
+
+### North star
+
+A trading diary page, not a terminal. One day at a time: what was decided at the open, how each trade moved, what the close settled at. Every day is filed, so any past day can be re-opened and studied.
+
+### Purpose, audience
+
+Owner and a few friends who practise on fake money and want to learn which kinds of day the rules work on. Plain words first (cut-loss, take-profit, "₹ if right / ₹ if wrong"); R multiples shown small beside rupees. Results are paper trades simulated from 5-minute prices, never fills. Real orders are placed by the user in their broker app.
+
+### Layout (≥1024px two columns, below that one column in this order)
+
+1. **Header row**: h1 "Intraday", day picker (previous / date / next), universe select (Nifty 50, Nifty Bank, All NSE liquid), the three run buttons (Plan open, Refresh prices, Close and settle), schedule line ("Opening scan 9:15, closing 15:35 IST · last ran …").
+2. **Day strip** (`<dl>`, 2×3 on mobile, 6 across on desktop): Day type, Net result ₹, Trades taken of planned, Won / Lost / Flat, Best and worst trade, Market move (Nifty 50, Nifty Bank).
+3. **Left column, "This day"**: trades in order of decision time. Row = symbol, side word (Buy / Short), decided at HH:MM, entry → cut-loss / take-profit, status (Open, Hit target, Cut-loss hit, Closed at 3:15), result ₹ and R, a path sparkline of R through the day. Below: "Planned, did not trigger" list (symbol, why).
+4. **Right column, "All days"**: cumulative win ratio line, a table of days (date, type, trades, win %, net ₹) where each row is a button that opens that day, and "How each kind of day did" (type, days, trades, win %, avg R).
+5. **"Schedule and rules" `<details>`**, closed by default: universe, sides, max trades a day, risk per trade, stop and take-profit style, opening range length, plus the cron lines for a system scheduler and a note on the data source (Yahoo now, Zerodha Kite later).
+
+Cards only where they hold interaction. One border level. Rows are buttons (≥44px tall).
+
+### Day types (text labels, no new hues)
+
+Trend up · Trend down · Range day · Reversal day · Gap day. Defined by Nifty 50 5-minute prices (gap, open-to-close, range, where the close sits in the range, first-hour direction vs final). The page shows the rule in a tooltip-free `<details>` so the label is never a black box.
+
+### States
+
+Loading: skeleton lines of fixed height (no layout shift). Empty day: "No record for this day yet. Press Plan open to build it, or Close and settle to replay it from prices." Running job: spinner on the button and a thin progress bar. Offline/blip: plain sentence from `friendlyError`. Never show a P&L before the data exists; "—" instead.
+
+### Motion budget (3D: **none / poster** — internal tool, doctrine dashboard rule)
+
+- Tier A (signature): none. A dashboard does not get a hero scene.
+- Tier B (support): (1) row/day selection tint, 150ms, `ease-out`, opacity/background only; (2) spinner on the running button; (3) job progress bar, `width` is replaced by `transform: scaleX` with 300ms `ease-out`.
+- Tier C (forbidden): count-up numbers, animated sparklines, chart entrance animations, flashing P&L.
+- `prefers-reduced-motion: reduce`: `motion-reduce:transition-none` on every transition and the spinner becomes static text "Working…".
+
+### Motion storyboard
+
+| Moment | What moves | Why | Reduced motion |
+|---|---|---|---|
+| Open a different day | Row tint on the table, detail swaps in place | Shows the current day | Instant swap |
+| A run starts | Spinner on that button, thin bar under the header fills | Work is happening, no layout shift | Text "Working…", bar still fills without easing |
+| A run ends | Day strip and trade list swap content; "as of HH:MM" updates | Freshness shown by the time, not by animation | Same |
+| Trade status changes (refresh) | Status word and result change, nothing animates | Avoids flashing money figures | Same |
+
+### Performance contract
+
+No chart library for the sparklines or the win-ratio line: inline SVG from the data (a few hundred points at most). Page code-split like the other routes. All lists render ≤ 60 rows without virtualization; the day table pages 30 days at a time. Polling only while a job runs (every 2 s, stops on unmount).
+
+### A11y
+
+One h1. Day picker, run buttons and table rows are real `button`/`input` elements with visible focus rings. Color is never the only signal: Buy / Short and Won / Lost are words, results carry a + or − sign. SVG charts have a text summary in `aria-label` and a data table fallback inside `<details>`. Contrast ≥4.5:1 on host tokens. Works from 375px wide.
+
+### Don't
+
+- Present simulated results as fills or imply advice.
+- Show a win % without the trade count beside it.
+- Put the run controls anywhere but the header row.
+- Add hues beyond emerald (gain), rose (loss), amber (warning, open), muted.

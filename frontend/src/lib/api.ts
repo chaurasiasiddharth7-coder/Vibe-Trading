@@ -278,6 +278,31 @@ function appendQueryParam(url: string, key: string, value: string): string {
 
 export const api = {
   uploadFile,
+  intradayDays: (limit = 120) =>
+    request<{ ok: boolean; data: import("@/lib/intraday").DayRow[] }>(`/api/desk/intraday/days?limit=${limit}`),
+  intradayDay: (date: string) =>
+    request<{ ok: boolean; data: import("@/lib/intraday").DayRecord | null; running: string | null }>(
+      `/api/desk/intraday/day/${encodeURIComponent(date)}`,
+    ),
+  intradayRun: (date: string, kind: import("@/lib/intraday").RunKind) =>
+    request<{ ok: boolean; started: string; date: string }>(
+      `/api/desk/intraday/day/${encodeURIComponent(date)}/run?kind=${kind}`,
+      { method: "POST" },
+    ),
+  intradayBackfill: (days = 30, force = false) =>
+    request<{ ok: boolean; started: string; days: number }>(`/api/desk/intraday/backfill?days=${days}${force ? "&force=true" : ""}`, { method: "POST" }),
+  intradayStats: () => request<{ ok: boolean; data: import("@/lib/intraday").IntradayStats }>("/api/desk/intraday/stats"),
+  intradaySettings: () =>
+    request<{ ok: boolean; data: import("@/lib/intraday").IntradaySettings; universes: Record<string, string> }>(
+      "/api/desk/intraday/settings",
+    ),
+  intradaySaveSettings: (body: Partial<import("@/lib/intraday").IntradaySettings>) =>
+    request<{ ok: boolean; data: import("@/lib/intraday").IntradaySettings }>("/api/desk/intraday/settings", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  intradaySchedule: () =>
+    request<{ ok: boolean; data: import("@/lib/intraday").ScheduleStatus }>("/api/desk/intraday/schedule"),
   getAlphadeskAnalysis: (symbol: string, period = "6mo", interval = "1d") =>
     request<{ ok: boolean; data: AnalysisPayload }>(
       `/api/analysis/${encodeURIComponent(symbol)}?period=${encodeURIComponent(period)}&interval=${encodeURIComponent(interval)}`,
