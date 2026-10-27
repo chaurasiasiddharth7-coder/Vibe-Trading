@@ -30,6 +30,7 @@ MAX_AGE_S = 7 * 24 * 3600
 UNIVERSES: dict[str, dict[str, str]] = {
     "core": {"label": "Original list (30 big companies)", "file": ""},
     "nifty50": {"label": "Nifty 50: India's 50 biggest companies", "file": "ind_nifty50list"},
+    "niftybank": {"label": "Nifty Bank: the big banks", "file": "ind_niftybanklist"},
     "nifty100": {"label": "Nifty 100: top 100 companies", "file": "ind_nifty100list"},
     "nifty200": {"label": "Nifty 200: top 200 companies", "file": "ind_nifty200list"},
     "nifty500": {"label": "Nifty 500: top 500 companies", "file": "ind_nifty500list"},
