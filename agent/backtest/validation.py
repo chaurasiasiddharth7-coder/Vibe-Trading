@@ -1,9 +1,10 @@
 """Statistical validation for backtest results.
 
-Three independent tools:
+Four independent tools:
   - Monte Carlo permutation test: is the strategy significantly better than random?
   - Bootstrap Sharpe CI: how stable is the risk-adjusted return?
   - Walk-Forward analysis: is performance consistent across time windows?
+  - Multiple-testing haircut: is the best of N tried variants just the luckiest of N?
 
 Usage: called automatically by BaseEngine.run_backtest when config[\"validation\"]
 is present, or invoked directly on backtest outputs.
@@ -14,6 +15,7 @@ from __future__ import annotations
 import json
 import math
 from numbers import Integral, Real
+from statistics import NormalDist
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -253,6 +255,53 @@ def walk_forward_analysis(
     }
 
 
+# ─── Multiple-testing haircut ───
+
+_EULER_GAMMA = 0.5772156649015329
+
+
+def selection_bar(n_trials: int, n_obs: int, bars_per_year: int = 252) -> float:
+    """Annualised Sharpe the best of ``n_trials`` worthless strategies reaches by luck alone.
+
+    Expected maximum of N null Sharpes (Bailey & Lopez de Prado): with ``T`` years of data the
+    annualised Sharpe of a no-edge strategy has standard deviation 1/sqrt(T), and
+    E[max] = sd * ((1 - g) * z(1 - 1/N) + g * z(1 - 1/(N e))) with g the Euler constant.
+    """
+    if n_trials <= 1 or n_obs <= 1:
+        return 0.0
+    years = n_obs / bars_per_year
+    z = NormalDist().inv_cdf
+    n = float(n_trials)
+    return float((1 / math.sqrt(years)) * ((1 - _EULER_GAMMA) * z(1 - 1 / n)
+                                            + _EULER_GAMMA * z(1 - 1 / (n * math.e))))
+
+
+def multiple_testing_haircut(
+    equity_curve: pd.Series, n_trials: int, bars_per_year: int = 252
+) -> Dict[str, Any]:
+    """Compare a run's Sharpe with the bar that ``n_trials`` tries would clear by chance.
+
+    Below the bar, the number of variants tried explains the result; the Sharpe left after the
+    haircut is ``observed - bar``. Count every variant you looked at (parameters, symbols,
+    rules), not only the ones you kept.
+    """
+    if isinstance(n_trials, bool) or not isinstance(n_trials, Integral) or n_trials < 1:
+        return {"error": f"n_trials must be >= 1, got {n_trials}"}
+    returns = equity_curve.pct_change().dropna().to_numpy(dtype=float)
+    if len(returns) < 2:
+        return {"error": "need at least 2 return observations"}
+    observed = _sharpe(returns, bars_per_year)
+    bar = selection_bar(int(n_trials), len(returns), bars_per_year)
+    return {
+        "observed_sharpe": round(observed, 4),
+        "selection_bar": round(bar, 4),
+        "haircut_sharpe": round(observed - bar, 4),
+        "passes": bool(observed > bar),
+        "n_trials": int(n_trials),
+        "n_obs": len(returns),
+    }
+
+
 # ─── Runner integration ───
 
 
@@ -269,6 +318,7 @@ def run_validation(
       - monte_carlo: {n_simulations, seed}
       - bootstrap: {n_bootstrap, confidence, seed}
       - walk_forward: {n_windows}
+      - multiple_testing: {n_trials}
 
     Args:
         config: Backtest config (must contain "validation" key).
@@ -309,6 +359,12 @@ def run_validation(
             trades,
             n_windows=wf_cfg.get("n_windows", 5),
             bars_per_year=bars_per_year,
+        )
+
+    if "multiple_testing" in v_cfg:
+        mt_cfg = v_cfg["multiple_testing"] if isinstance(v_cfg["multiple_testing"], dict) else {}
+        results["multiple_testing"] = multiple_testing_haircut(
+            equity_curve, mt_cfg.get("n_trials", 1), bars_per_year=bars_per_year
         )
 
     return results
