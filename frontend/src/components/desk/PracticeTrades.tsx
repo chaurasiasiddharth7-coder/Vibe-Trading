@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { backwards, groupByInvested, inInvestedRange } from "@/components/desk/tradeFilters";
+import { dayLabel } from "@/lib/intraday";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 import type { ExitPlan, PaperTrade } from "@/lib/api";
 import { SymbolInsight } from "@/components/desk/SymbolInsight";
@@ -587,11 +589,17 @@ export function PracticeTrades({
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [filter, setFilter] = useState<Filter>("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [byDate, setByDate] = useState(true);
 
   const openTrades = trades.filter((t) => t.status === "OPEN");
   const closedTrades = trades.filter((t) => t.status === "CLOSED");
   const sum = (xs: Array<number | null>) => xs.reduce<number>((a, b) => a + (b ?? 0), 0);
-  const shown = filter === "open" ? openTrades : filter === "closed" ? closedTrades : trades;
+  const byStatus = filter === "open" ? openTrades : filter === "closed" ? closedTrades : trades;
+  const badRange = backwards(from, to);
+  const shown = badRange ? byStatus : byStatus.filter((t) => inInvestedRange(t, from, to));
+  const dateFiltered = (from !== "" || to !== "") && !badRange;
 
   const toggle = (id: string) =>
     setExpanded((prev) => {
@@ -600,6 +608,79 @@ export function PracticeTrades({
       else next.add(id);
       return next;
     });
+
+  const renderRow = (t: PaperTrade) => {
+    const r = resultOf(t);
+    const isOpen = expanded.has(t.id);
+    return (
+      <li key={t.id}>
+        <div className="flex items-stretch">
+          <button
+            type="button"
+            aria-expanded={glanceId === t.id}
+            aria-label={`${t.symbol} at a glance`}
+            onClick={() => setGlanceId(glanceId === t.id ? null : t.id)}
+            className="min-h-12 pl-3 pr-2 text-left w-36 sm:w-44 shrink-0 hover:bg-muted/40"
+          >
+            <span className="font-semibold underline decoration-dotted underline-offset-4">{t.symbol}</span>
+            {(() => {
+              const es = entryScoreOf(t);
+              return (
+                <span className="block text-xs text-muted-foreground truncate">
+                  {es && <span className="font-mono text-foreground">{es.score.toFixed(1)}/10</span>}
+                  {es && t.decision?.name && t.decision.name !== t.symbol ? " · " : ""}
+                  {t.decision?.name && t.decision.name !== t.symbol ? t.decision.name : ""}
+                </span>
+              );
+            })()}
+          </button>
+          <button
+            type="button"
+            aria-expanded={isOpen}
+            onClick={() => toggle(t.id)}
+            className="flex-1 min-w-0 min-h-12 px-2 py-2 grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_1.2fr_1fr_auto] items-center gap-x-3 gap-y-1 text-left hover:bg-muted/40"
+          >
+            <span className="text-sm hidden sm:block">
+              {t.side === "LONG" ? "Buy" : "Short"} × {t.qty}
+            </span>
+            <span className="font-mono text-sm hidden sm:block whitespace-nowrap">
+              {inr(t.entry)} → {inr(t.status === "OPEN" ? t.current_price : t.exit_price)}
+            </span>
+            <span className="text-xs text-muted-foreground hidden sm:block">
+              {t.status === "OPEN" ? "Open" : (EXIT_LABEL[t.exit_reason ?? ""] ?? "Closed")}
+              {t.status === "OPEN" && (t.plan !== "fixed" || (t.stop_now != null && t.stop_now !== t.stop)) && (
+                <span className="block text-[11px]">
+                  {isTrailing(t.plan) ? "Trailing" : t.plan === "breakeven" ? "Break-even" : "Moved"} · cut-loss {inr(t.stop_now ?? t.stop, 0)}
+                </span>
+              )}
+            </span>
+            <span className="flex items-center gap-2 justify-end whitespace-nowrap">
+              <span className={cn("font-mono text-sm", (r ?? 0) > 0 && "text-emerald-400", (r ?? 0) < 0 && "text-rose-400")}>
+                {money(r)}
+              </span>
+              <ChevronDown
+                className={cn("h-4 w-4 text-muted-foreground transition-transform duration-150 ease-out motion-reduce:transition-none", isOpen && "rotate-180")}
+                aria-hidden
+              />
+            </span>
+          </button>
+          <div className="w-12 shrink-0 flex items-center justify-center">
+            {t.status === "OPEN" && (
+              <TradeActions
+                t={t}
+                busy={planBusy === t.id}
+                onChangePlan={onChangePlan}
+                onMoveStop={onMoveStop}
+                onExit={onExit}
+              />
+            )}
+          </div>
+        </div>
+        {glanceId === t.id && <Glance t={t} />}
+        {isOpen && <Detail t={t} onChangePlan={onChangePlan} planBusy={planBusy === t.id} />}
+      </li>
+    );
+                };
 
   return (
     <section className="rounded-lg border border-border" aria-labelledby="trades-h">
@@ -693,80 +774,54 @@ export function PracticeTrades({
                 </button>
               </div>
 
-              <ul className="divide-y divide-border rounded-md border border-border">
-                {shown.map((t) => {
-                  const r = resultOf(t);
-                  const isOpen = expanded.has(t.id);
-                  return (
-                    <li key={t.id}>
-                      <div className="flex items-stretch">
-                        <button
-                          type="button"
-                          aria-expanded={glanceId === t.id}
-                          aria-label={`${t.symbol} at a glance`}
-                          onClick={() => setGlanceId(glanceId === t.id ? null : t.id)}
-                          className="min-h-12 pl-3 pr-2 text-left w-36 sm:w-44 shrink-0 hover:bg-muted/40"
-                        >
-                          <span className="font-semibold underline decoration-dotted underline-offset-4">{t.symbol}</span>
-                          {(() => {
-                            const es = entryScoreOf(t);
-                            return (
-                              <span className="block text-xs text-muted-foreground truncate">
-                                {es && <span className="font-mono text-foreground">{es.score.toFixed(1)}/10</span>}
-                                {es && t.decision?.name && t.decision.name !== t.symbol ? " · " : ""}
-                                {t.decision?.name && t.decision.name !== t.symbol ? t.decision.name : ""}
-                              </span>
-                            );
-                          })()}
-                        </button>
-                        <button
-                          type="button"
-                          aria-expanded={isOpen}
-                          onClick={() => toggle(t.id)}
-                          className="flex-1 min-w-0 min-h-12 px-2 py-2 grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_1.2fr_1fr_auto] items-center gap-x-3 gap-y-1 text-left hover:bg-muted/40"
-                        >
-                          <span className="text-sm hidden sm:block">
-                            {t.side === "LONG" ? "Buy" : "Short"} × {t.qty}
+              <div className="flex flex-wrap items-end gap-3" role="group" aria-label="Filter by date invested">
+                <label className="text-xs text-muted-foreground space-y-1">
+                  <span className="block">Invested from</span>
+                  <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="block min-h-9 rounded-md border border-border bg-background px-2 font-mono text-sm text-foreground" />
+                </label>
+                <label className="text-xs text-muted-foreground space-y-1">
+                  <span className="block">to</span>
+                  <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="block min-h-9 rounded-md border border-border bg-background px-2 font-mono text-sm text-foreground" />
+                </label>
+                <button type="button" onClick={() => { setFrom(""); setTo(""); }} disabled={!from && !to} className="min-h-9 px-3 rounded-md border border-border text-xs hover:bg-muted disabled:opacity-50">
+                  Clear dates
+                </button>
+                <label className="flex items-center gap-2 min-h-9 text-xs text-muted-foreground ml-auto">
+                  <input type="checkbox" checked={byDate} onChange={(e) => setByDate(e.target.checked)} className="h-4 w-4" />
+                  List by date invested
+                </label>
+              </div>
+              {badRange && <p role="alert" className="text-xs text-amber-400">The "from" date is after the "to" date, so the dates are ignored.</p>}
+              {dateFiltered && (
+                <p className="text-xs text-muted-foreground" aria-live="polite">
+                  Showing {shown.length} of {byStatus.length} trades invested {from ? `from ${dayLabel(from)} ` : ""}{to ? `to ${dayLabel(to)}` : ""}.
+                </p>
+              )}
+
+              {byDate && shown.length > 0 ? (
+                <div className="space-y-3">
+                  {groupByInvested(shown).map((g) => {
+                    const total = sum(g.trades.map(resultOf));
+                    return (
+                      <section key={g.date || "unknown"} aria-label={`Invested ${g.date ? dayLabel(g.date) : "on an unknown date"}`}>
+                        <h3 className="flex flex-wrap items-baseline justify-between gap-2 px-1 pb-1 text-xs text-muted-foreground">
+                          <span className="font-mono text-foreground">{g.date ? dayLabel(g.date) : "Date unknown"}</span>
+                          <span>
+                            {g.trades.length} trade{g.trades.length === 1 ? "" : "s"} ·{" "}
+                            <span className={cn("font-mono", total > 0 && "text-emerald-400", total < 0 && "text-rose-400")}>{money(total)}</span>
                           </span>
-                          <span className="font-mono text-sm hidden sm:block whitespace-nowrap">
-                            {inr(t.entry)} → {inr(t.status === "OPEN" ? t.current_price : t.exit_price)}
-                          </span>
-                          <span className="text-xs text-muted-foreground hidden sm:block">
-                            {t.status === "OPEN" ? "Open" : (EXIT_LABEL[t.exit_reason ?? ""] ?? "Closed")}
-                            {t.status === "OPEN" && (t.plan !== "fixed" || (t.stop_now != null && t.stop_now !== t.stop)) && (
-                              <span className="block text-[11px]">
-                                {isTrailing(t.plan) ? "Trailing" : t.plan === "breakeven" ? "Break-even" : "Moved"} · cut-loss {inr(t.stop_now ?? t.stop, 0)}
-                              </span>
-                            )}
-                          </span>
-                          <span className="flex items-center gap-2 justify-end whitespace-nowrap">
-                            <span className={cn("font-mono text-sm", (r ?? 0) > 0 && "text-emerald-400", (r ?? 0) < 0 && "text-rose-400")}>
-                              {money(r)}
-                            </span>
-                            <ChevronDown
-                              className={cn("h-4 w-4 text-muted-foreground transition-transform duration-150 ease-out motion-reduce:transition-none", isOpen && "rotate-180")}
-                              aria-hidden
-                            />
-                          </span>
-                        </button>
-                        <div className="w-12 shrink-0 flex items-center justify-center">
-                          {t.status === "OPEN" && (
-                            <TradeActions
-                              t={t}
-                              busy={planBusy === t.id}
-                              onChangePlan={onChangePlan}
-                              onMoveStop={onMoveStop}
-                              onExit={onExit}
-                            />
-                          )}
-                        </div>
-                      </div>
-                      {glanceId === t.id && <Glance t={t} />}
-                      {isOpen && <Detail t={t} onChangePlan={onChangePlan} planBusy={planBusy === t.id} />}
-                    </li>
-                  );
-                })}
-              </ul>
+                        </h3>
+                        <ul className="divide-y divide-border rounded-md border border-border">{g.trades.map(renderRow)}</ul>
+                      </section>
+                    );
+                  })}
+                </div>
+              ) : (
+                <ul className="divide-y divide-border rounded-md border border-border">{shown.map(renderRow)}</ul>
+              )}
+              {shown.length === 0 && (
+                <p className="text-sm text-muted-foreground">No practice trades were invested in those dates. Change or clear the dates.</p>
+              )}
               <p className="text-xs text-muted-foreground">
                 Open results are on paper and change with the price. A trade counts toward the 30-trade track record
                 once it finishes.

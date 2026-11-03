@@ -11,6 +11,7 @@ const apiMock = vi.hoisted(() => ({
   intradayDays: vi.fn(),
   intradayStats: vi.fn(),
   intradayRun: vi.fn(),
+  intradaySearch: vi.fn(),
   intradayBackfill: vi.fn(),
   intradaySaveSettings: vi.fn(),
   getUniverses: vi.fn(),
@@ -62,6 +63,7 @@ describe("Intraday page", () => {
     apiMock.intradayDay.mockResolvedValue({ ok: true, data: record, running: null });
     apiMock.intradayDays.mockResolvedValue({ ok: true, data: [row] });
     apiMock.intradayStats.mockResolvedValue({ ok: true, data: stats });
+    apiMock.intradaySearch.mockResolvedValue({ ok: true, data: { days: [], totals: { trades: 0, wins: 0, losses: 0, flat: 0, open: 0, net_inr: 0, net_r: 0, win_rate: null, days: 0 }, truncated: false } });
   });
 
   it("shows the day, its trades and the history, even under StrictMode's double mount", async () => {
@@ -122,7 +124,7 @@ describe("Intraday page", () => {
   it("reports a failed load in plain words", async () => {
     apiMock.intradaySettings.mockRejectedValue(new TypeError("Failed to fetch"));
     mount();
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Couldn't reach the server/);
+    expect((await screen.findAllByRole("alert"))[0]).toHaveTextContent(/Couldn't reach the server/);
   });
 });
 
@@ -142,5 +144,98 @@ describe("Intraday page: rule consistency", () => {
     expect(screen.getByText(/other rules/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Refile all days with today's rules" }));
     await waitFor(() => expect(apiMock.intradayBackfill).toHaveBeenCalledWith(90, true));
+  });
+});
+
+
+describe("Intraday page: find trades", () => {
+  const sTrade = (id: string, symbol: string, pnl: number) => ({
+    id, symbol, side: "long", tags: ["nifty50"], decided_at: "09:35", entry: 100, stop: 99, target: 102, qty: 10, status: "target",
+    exit_time: "10:00", last_price: 102, last_time: "10:00", r_net: pnl / 1000, pnl_inr: pnl, mfe_r: 2, mae_r: 0, outcome: pnl > 0 ? "won" : "lost",
+  });
+  const sday = (date: string, label: string, trades: ReturnType<typeof sTrade>[]) => ({
+    date, weekday: "Mon", status: "settled", label, type: "range", rules_match: true,
+    summary: { trades: trades.length, wins: trades.filter((t) => t.pnl_inr > 0).length, losses: 0, flat: 0, open: 0, net_inr: trades.reduce((a, t) => a + t.pnl_inr, 0), net_r: 0 },
+    trades,
+  });
+  const all = {
+    days: [sday("2026-10-14", "Range day", [sTrade("1", "WIPRO", 500), sTrade("2", "INFY", -200)]), sday("2026-10-13", "Trend up", [sTrade("3", "TCS", 900)])],
+    totals: { trades: 3, wins: 2, losses: 1, flat: 0, open: 0, net_inr: 1200, net_r: 1.2, win_rate: 0.6667, days: 2 }, truncated: false,
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    apiMock.getUniverses.mockResolvedValue({});
+    apiMock.intradaySettings.mockResolvedValue({ ok: true, data: settings, universes: { nifty50: "Nifty 50" } });
+    apiMock.intradaySchedule.mockResolvedValue({ ok: true, data: schedule });
+    apiMock.intradayDay.mockResolvedValue({ ok: true, data: record, running: null });
+    apiMock.intradayDays.mockResolvedValue({ ok: true, data: [row] });
+    apiMock.intradayStats.mockResolvedValue({ ok: true, data: stats });
+    apiMock.intradaySearch.mockResolvedValue({ ok: true, data: all });
+  });
+
+  it("lists matching trades date by date, newest first, with each date's result", async () => {
+    mount();
+    const region = await screen.findByRole("region", { name: "Find trades" });
+    await waitFor(() => expect(region).toHaveTextContent("3 trades over 2 days"));
+    const headers = Array.from(region.querySelectorAll("button")).filter((b) => /trade/.test(b.textContent ?? "") && /Range day|Trend up/.test(b.textContent ?? ""));
+    expect(headers.map((h) => h.textContent)).toEqual([expect.stringContaining("Range day · 2 trades"), expect.stringContaining("Trend up · 1 trade")]);
+    expect(headers[0]).toHaveTextContent("+₹300");
+    expect(region).toHaveTextContent("WIPRO");
+    expect(region).toHaveTextContent("Hit take-profit at 10:00");
+  });
+
+  it("sends only the filters you set, and ignores a backwards date range", async () => {
+    mount();
+    await waitFor(() => expect(screen.getByRole("region", { name: "Find trades" })).toHaveTextContent("3 trades over 2 days"));
+    apiMock.intradaySearch.mockClear();
+    fireEvent.change(screen.getByLabelText("Taken from"), { target: { value: "2026-10-13" } });
+    fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "tcs" } });
+    fireEvent.change(screen.getByLabelText("Result"), { target: { value: "won" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await waitFor(() => expect(apiMock.intradaySearch).toHaveBeenCalledWith("from=2026-10-13&symbol=TCS&outcome=won"));
+    fireEvent.change(screen.getByLabelText("Taken to"), { target: { value: "2026-10-01" } });
+    expect(screen.getByRole("alert")).toHaveTextContent(/after the "taken to" date/);
+    expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
+    apiMock.intradaySearch.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    await waitFor(() => expect(apiMock.intradaySearch).toHaveBeenCalledWith(""));
+  });
+
+  it("uses singular wording for one trade on one day", async () => {
+    apiMock.intradaySearch.mockResolvedValue({ ok: true, data: { days: [all.days[1]], totals: { ...all.totals, trades: 1, days: 1, wins: 1, losses: 0, win_rate: 1, net_inr: 900 }, truncated: false } });
+    mount();
+    await waitFor(() => expect(screen.getByRole("region", { name: "Find trades" })).toHaveTextContent("1 trade over 1 day ·"));
+  });
+
+  it("opens a day when its date is pressed", async () => {
+    mount();
+    await waitFor(() => expect(screen.getByRole("region", { name: "Find trades" })).toHaveTextContent("3 trades over 2 days"));
+    apiMock.intradayDay.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /Trend up · 1 trade/ }));
+    await waitFor(() => expect(apiMock.intradayDay).toHaveBeenCalledWith("2026-10-13"));
+  });
+
+  it("says so when nothing matches and never lets a slow old answer overwrite a newer one", async () => {
+    let releaseOld!: (v: unknown) => void;
+    apiMock.intradaySearch.mockReset();
+    apiMock.intradaySearch.mockImplementationOnce(() => new Promise((r) => { releaseOld = r; })); // first (mount) search stays pending
+    apiMock.intradaySearch.mockResolvedValueOnce({ ok: true, data: { days: [], totals: { trades: 0, wins: 0, losses: 0, flat: 0, open: 0, net_inr: 0, net_r: 0, win_rate: null, days: 0 }, truncated: false } });
+    render(<MemoryRouter><Intraday /></MemoryRouter>); // no StrictMode: its double mount would fire the first search twice
+    await waitFor(() => expect(apiMock.intradaySearch).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "ZZZ" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByText(/No trades match/)).toBeInTheDocument();
+    releaseOld({ ok: true, data: all }); // the stale answer arrives late
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText(/No trades match/)).toBeInTheDocument();
+    expect(screen.queryByText("WIPRO")).toBeNull();
+  });
+
+  it("reports a failed search in plain words", async () => {
+    apiMock.intradaySearch.mockRejectedValue(new TypeError("Failed to fetch"));
+    mount();
+    expect(await screen.findAllByRole("alert")).not.toHaveLength(0);
+    expect(screen.getByRole("region", { name: "Find trades" })).toHaveTextContent(/Couldn't reach the server/);
   });
 });

@@ -280,6 +280,8 @@ export const api = {
   uploadFile,
   intradayDays: (limit = 120) =>
     request<{ ok: boolean; data: import("@/lib/intraday").DayRow[] }>(`/api/desk/intraday/days?limit=${limit}`),
+  intradaySearch: (query: string) =>
+    request<{ ok: boolean; data: import("@/lib/intraday").SearchResult }>(`/api/desk/intraday/search${query ? `?${query}` : ""}`),
   intradayDay: (date: string) =>
     request<{ ok: boolean; data: import("@/lib/intraday").DayRecord | null; running: string | null }>(
       `/api/desk/intraday/day/${encodeURIComponent(date)}`,

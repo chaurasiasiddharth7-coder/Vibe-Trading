@@ -136,3 +136,64 @@ describe("PracticeTrades glance and review", () => {
     expect(screen.getByRole("note")).toHaveTextContent("21%");
   });
 });
+
+
+describe("PracticeTrades date invested", () => {
+  const mk = (id: string, symbol: string, opened_at: string, extra: Partial<PaperTrade> = {}): PaperTrade => ({
+    ...base, id, symbol, opened_at, opened_bar: opened_at.slice(0, 10), ...extra,
+  });
+  const three = [
+    mk("a", "AAA", "2026-10-13T05:00:00Z"),
+    mk("b", "BBB", "2026-10-14T05:00:00Z"),
+    mk("c", "CCC", "2026-10-14T06:00:00Z", { status: "CLOSED", exit_price: 106, exit_reason: "target", r_multiple: 2, pnl_inr: 60, closed_at: "2026-10-16T05:00:00Z" }),
+  ];
+  const symbols = () => screen.queryAllByRole("button").map((b) => b.getAttribute("aria-label") ?? "").filter((l) => l.endsWith("at a glance")).map((l) => l.split(" ")[0]);
+  const from = () => screen.getByLabelText("Invested from") as HTMLInputElement;
+  const to = () => screen.getByLabelText("to") as HTMLInputElement;
+
+  it("lists each date under its own heading with that date's result", () => {
+    setup(three);
+    expect(screen.getByRole("region", { name: /Invested .*14/ })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /Invested .*13/ })).toBeInTheDocument();
+    const day14 = screen.getByRole("region", { name: /Invested .*14/ });
+    expect(day14).toHaveTextContent("2 trades");
+    expect(symbols()).toEqual(["BBB", "CCC", "AAA"]); // newest date first
+  });
+
+  it("filters by the date invested and says how many are shown", () => {
+    setup(three);
+    fireEvent.change(from(), { target: { value: "2026-10-14" } });
+    expect(symbols()).toEqual(["BBB", "CCC"]);
+    expect(screen.getByText(/Showing 2 of 3 trades invested from/)).toBeInTheDocument();
+    fireEvent.change(to(), { target: { value: "2026-10-14" } });
+    expect(symbols()).toEqual(["BBB", "CCC"]);
+    fireEvent.change(from(), { target: { value: "2026-10-15" } });
+    fireEvent.change(to(), { target: { value: "" } });
+    expect(symbols()).toEqual([]);
+    expect(screen.getByText(/No practice trades were invested in those dates/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear dates" }));
+    expect(symbols()).toEqual(["BBB", "CCC", "AAA"]);
+  });
+
+  it("combines with the open / finished filter", () => {
+    setup(three);
+    fireEvent.change(from(), { target: { value: "2026-10-14" } });
+    fireEvent.click(screen.getByRole("button", { name: /Finished/ }));
+    expect(symbols()).toEqual(["CCC"]);
+  });
+
+  it("ignores a backwards range and says so", () => {
+    setup(three);
+    fireEvent.change(from(), { target: { value: "2026-10-15" } });
+    fireEvent.change(to(), { target: { value: "2026-10-13" } });
+    expect(screen.getByRole("alert")).toHaveTextContent(/after the "to" date/);
+    expect(symbols()).toHaveLength(3);
+  });
+
+  it("can go back to one plain list", () => {
+    setup(three);
+    fireEvent.click(screen.getByLabelText("List by date invested"));
+    expect(screen.queryByRole("region", { name: /Invested/ })).toBeNull();
+    expect(symbols()).toHaveLength(3);
+  });
+});

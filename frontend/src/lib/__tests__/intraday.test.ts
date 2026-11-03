@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  EMPTY_FILTERS, backwardsRange, filtersActive, searchQuery,
   dayLabel, lastWeekday, rateText, shiftWeekday, signedInr, signedR, sparkGeometry, statusLabel, todayIst, waitForIdle,
   winRatioGeometry, type SeriesPoint,
 } from "@/lib/intraday";
@@ -94,5 +95,21 @@ describe("waiting for a job", () => {
     const flaky = () => (++calls < 3 ? Promise.reject(new TypeError("net")) : Promise.resolve({ running: null }));
     expect((await waitForIdle(flaky, () => undefined, () => true, instant))?.running).toBeNull();
     await expect(waitForIdle(() => Promise.reject(new TypeError("down")), () => undefined, () => true, instant, 2)).rejects.toThrow("down");
+  });
+});
+
+
+describe("search filters", () => {
+  it("leaves empty filters out and tidies the symbol", () => {
+    expect(searchQuery(EMPTY_FILTERS)).toBe("");
+    expect(filtersActive(EMPTY_FILTERS)).toBe(false);
+    const q = searchQuery({ ...EMPTY_FILTERS, from: "2026-10-01", to: "2026-10-31", symbol: " tcs ", side: "long", outcome: "won", kind: "trend_up", index: "niftybank" });
+    expect(q).toBe("from=2026-10-01&to=2026-10-31&symbol=TCS&side=long&outcome=won&kind=trend_up&index=niftybank");
+    expect(filtersActive({ ...EMPTY_FILTERS, symbol: "  " })).toBe(false); // blanks are not a filter
+  });
+  it("spots a backwards date range", () => {
+    expect(backwardsRange({ from: "2026-10-31", to: "2026-10-01" })).toBe(true);
+    expect(backwardsRange({ from: "2026-10-01", to: "2026-10-01" })).toBe(false);
+    expect(backwardsRange({ from: "", to: "2026-10-01" })).toBe(false);
   });
 });

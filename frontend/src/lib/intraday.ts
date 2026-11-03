@@ -181,6 +181,83 @@ export interface ScheduleStatus {
 
 export type RunKind = "open" | "refresh" | "close" | "replay";
 
+// --- search across days -----------------------------------------------------------------------------------
+
+export type Outcome = "won" | "lost" | "flat" | "open";
+
+export interface SearchTrade {
+  id: string;
+  symbol: string;
+  side: Side;
+  tags: string[];
+  decided_at: string;
+  entry: number;
+  stop: number;
+  target: number;
+  qty: number;
+  status: TradeStatus;
+  exit_time: string | null;
+  last_price: number;
+  last_time: string;
+  r_net: number;
+  pnl_inr: number;
+  mfe_r: number;
+  mae_r: number;
+  outcome: Outcome;
+}
+
+export interface SearchDay {
+  date: string;
+  weekday: string;
+  status: DayRecord["status"];
+  label: string | null;
+  type: string | null;
+  rules_match: boolean;
+  summary: { trades: number; wins: number; losses: number; flat: number; open: number; net_inr: number; net_r: number };
+  trades: SearchTrade[];
+}
+
+export interface SearchResult {
+  days: SearchDay[];
+  totals: { trades: number; wins: number; losses: number; flat: number; open: number; net_inr: number; net_r: number; win_rate: number | null; days: number };
+  truncated: boolean;
+}
+
+export interface SearchFilters {
+  from: string;
+  to: string;
+  symbol: string;
+  side: "" | Side;
+  outcome: "" | Outcome;
+  kind: string;
+  index: "" | "nifty50" | "niftybank";
+}
+
+export const EMPTY_FILTERS: SearchFilters = { from: "", to: "", symbol: "", side: "", outcome: "", kind: "", index: "" };
+
+export const DAY_KINDS: Array<[string, string]> = [
+  ["trend_up", "Trend up"], ["trend_down", "Trend down"], ["range", "Range day"],
+  ["reversal", "Reversal day"], ["gap", "Gap day"],
+];
+
+/** The query string for a search: empty filters are left out, symbols are trimmed and upper-cased. */
+export function searchQuery(f: SearchFilters): string {
+  const q = new URLSearchParams();
+  if (f.from) q.set("from", f.from);
+  if (f.to) q.set("to", f.to);
+  if (f.symbol.trim()) q.set("symbol", f.symbol.trim().toUpperCase());
+  if (f.side) q.set("side", f.side);
+  if (f.outcome) q.set("outcome", f.outcome);
+  if (f.kind) q.set("kind", f.kind);
+  if (f.index) q.set("index", f.index);
+  return q.toString();
+}
+
+/** True when both dates are set and the range runs backwards. */
+export const backwardsRange = (f: Pick<SearchFilters, "from" | "to">): boolean => !!f.from && !!f.to && f.from > f.to;
+
+export const filtersActive = (f: SearchFilters): boolean => searchQuery(f) !== "";
+
 // --- words and numbers ----------------------------------------------------------------------------
 
 export const sideWord = (s: Side) => (s === "long" ? "Buy" : "Short");

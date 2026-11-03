@@ -162,3 +162,15 @@ One h1. Day picker, run buttons and table rows are real `button`/`input` element
 - Show a win % without the trade count beside it.
 - Put the run controls anywhere but the header row.
 - Add hues beyond emerald (gain), rose (loss), amber (warning, open), muted.
+
+### `/intraday` addendum: Find trades (date-wise search)
+
+A section under the two columns, always visible, one job: find trades across every filed day and read them date by date.
+
+- Filters, one row that wraps: From and To (the dates the trades were taken), Symbol (part of a name), Buy or Short, Result (won, lost, flat, open), Kind of day, Index (Nifty 50, Nifty Bank). Search and Clear buttons. A backwards range shows a plain sentence and does not search.
+- Summary line first: trades, days, win rate with its count, net ₹. Then the list, newest date first, 15 dates at a time with "Show more days".
+- Each date is a header button (date, kind of day, trade count, day result) that opens that day above; its trades sit under it as compact rows (symbol, Buy/Short, decided time, entry, status in words, ₹). One border level, no cards.
+- Motion: none beyond the existing 150ms row tint. No count-up numbers, no animated list changes.
+- A11y: header buttons ≥44px, results region is `aria-live="polite"` so a new result count is announced, labels on every input.
+
+The practice-trades list on the Dashboard gets the same idea in miniature: From and To on the date a trade was invested (opened) and a "list by date invested" switch that puts each date under its own heading with that date's result.

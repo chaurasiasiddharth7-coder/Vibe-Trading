@@ -5,6 +5,7 @@ import { DayStrip } from "@/components/intraday/DayStrip";
 import { DaysPanel } from "@/components/intraday/DaysPanel";
 import { RulesPanel } from "@/components/intraday/RulesPanel";
 import { TradeList } from "@/components/intraday/TradeList";
+import { TradeSearch } from "@/components/intraday/TradeSearch";
 import { api } from "@/lib/api";
 import {
   dayLabel, lastWeekday, shiftWeekday, todayIst, waitForIdle,
@@ -188,6 +189,8 @@ export function Intraday() {
 
         <DaysPanel days={days} stats={stats} selected={date} onPick={pick} onRefile={() => backfill(true)} busy={busy} />
       </div>
+
+      <TradeSearch onOpenDay={(d) => { void pick(d); window.scrollTo({ top: 0, behavior: "auto" }); }} />
 
       {rec?.day && (
         <details className="text-xs text-muted-foreground">
