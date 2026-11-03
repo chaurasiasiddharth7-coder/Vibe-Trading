@@ -478,7 +478,7 @@ _CACHE: dict[str, tuple[int, int, dict]] = {}
 def _records(newest_first: bool = True) -> list[dict]:
     """Every filed day, parsed once per file version (the page asks several times per load)."""
     out = []
-    for path in sorted(days_dir().glob("*.json"), reverse=newest_first):
+    for path in sorted(days_dir().glob("[!.]*.json"), reverse=newest_first):
         try:
             st = path.stat()
         except FileNotFoundError:
@@ -486,8 +486,8 @@ def _records(newest_first: bool = True) -> list[dict]:
         hit = _CACHE.get(str(path))
         if not hit or hit[0] != st.st_mtime_ns or hit[1] != st.st_size:
             try:
-                hit = (st.st_mtime_ns, st.st_size, json.loads(path.read_text()))
-            except json.JSONDecodeError:
+                hit = (st.st_mtime_ns, st.st_size, json.loads(path.read_text(encoding="utf-8")))
+            except ValueError:  # bad JSON or bytes that are not UTF-8
                 continue
             _CACHE[str(path)] = hit
         out.append(hit[2])

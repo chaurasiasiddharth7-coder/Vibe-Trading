@@ -43,7 +43,7 @@ case "$code" in 200|401|403) echo "intraday routes present (HTTP $code)";; *) ec
 if [ "$SEED" = 1 ]; then
   src="$HOME/.vibe-trading/alphadesk/intraday"
   [ -d "$src/days" ] || { echo "nothing to seed: $src/days not found"; exit 1; }
-  tar -C "$src" -cf - days bars | ssh "$DEPLOY_HOST" "cd $DEPLOY_DIR/deploy/alphadesk && docker compose exec -T alphadesk-api sh -c 'mkdir -p /home/vibe/.vibe-trading/alphadesk/intraday && tar -C /home/vibe/.vibe-trading/alphadesk/intraday -xf -'"
+  COPYFILE_DISABLE=1 tar --no-xattrs -C "$src" -cf - days bars | ssh "$DEPLOY_HOST" "cd $DEPLOY_DIR/deploy/alphadesk && docker compose exec -T alphadesk-api sh -c 'mkdir -p /home/vibe/.vibe-trading/alphadesk/intraday && tar -C /home/vibe/.vibe-trading/alphadesk/intraday -xf -'"
   echo "seeded $(ls "$src/days" | wc -l | tr -d ' ') filed days and the 5-minute store"
 fi
 echo "backend live. Next: deploy the front end (cd frontend && vercel deploy --prod)."

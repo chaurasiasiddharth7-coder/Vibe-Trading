@@ -2,6 +2,7 @@
 day types, statistics, the two daily jobs, and the API."""
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 
 import numpy as np
@@ -432,3 +433,12 @@ def test_api_search_and_date_filters(env, two_days):
             assert c.get(f"/api/desk/intraday/search?{bad}").status_code == 422, bad
     finally:
         app.dependency_overrides.clear()
+
+
+def test_list_days_ignores_dotfiles_and_undecodable_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(days, "days_dir", lambda: tmp_path)
+    days._CACHE.clear()
+    (tmp_path / "2026-10-01.json").write_text(json.dumps({"date": "2026-10-01"}))
+    (tmp_path / "._2026-10-01.json").write_bytes(b"\x00\x05\x16\x07" + bytes([0xa3]) * 40)
+    (tmp_path / "2026-10-02.json").write_bytes(b'{"date": "\xa3"}')
+    assert [r["date"] for r in days._records()] == ["2026-10-01"]
