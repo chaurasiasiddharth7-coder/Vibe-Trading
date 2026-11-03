@@ -20,7 +20,10 @@ cd "$repo"
 if ! git diff --quiet HEAD -- agent deploy; then echo "Uncommitted changes under agent/ or deploy/: commit first (this deploys what is committed)."; exit 1; fi
 [ -d third_party/Kronos ] || echo "note: third_party/Kronos is not in this checkout; the server keeps its own copy."
 
-RS=(rsync -az --exclude '__pycache__' --exclude '*.pyc' --exclude '.env')
+# Local-only, gitignored state (session transcripts, runs, uploaded portfolios) must never ship.
+RS=(rsync -az --exclude '__pycache__' --exclude '*.pyc' --exclude '.env'
+    --exclude '/sessions/' --exclude '/runs/' --exclude '/uploads/' --exclude '/.swarm/'
+    --exclude '*.egg-info/')
 if [ "$DRY" = 1 ]; then RS+=(--dry-run --itemize-changes); fi
 "${RS[@]}" agent/ "$DEPLOY_HOST:$DEPLOY_DIR/agent/"
 "${RS[@]}" deploy/alphadesk/ "$DEPLOY_HOST:$DEPLOY_DIR/deploy/alphadesk/"
