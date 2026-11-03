@@ -108,12 +108,37 @@ def register_intraday_routes(app: FastAPI, require_auth: AuthDep) -> None:
 
     # --- the day log -------------------------------------------------------------------------------
 
+    def _range(date_from: str | None, date_to: str | None) -> None:
+        if date_from and date_to and date_from > date_to:
+            raise HTTPException(status_code=400, detail="The 'from' date is after the 'to' date.")
+
     @app.get("/api/desk/intraday/days", dependencies=[Depends(require_auth)])
-    def list_days(limit: int = Query(120, ge=1, le=800)) -> dict[str, Any]:
-        """One light row per filed day, newest first."""
+    def list_days(limit: int = Query(120, ge=1, le=800),
+                  date_from: str | None = Query(None, alias="from", pattern=DATE_PATTERN),
+                  date_to: str | None = Query(None, alias="to", pattern=DATE_PATTERN)) -> dict[str, Any]:
+        """One light row per filed day, newest first, optionally only days between two dates."""
         from src.alphadesk.intraday import days
 
-        return {"ok": True, "data": days.list_days(limit)}
+        _range(date_from, date_to)
+        return {"ok": True, "data": days.list_days(limit, date_from, date_to)}
+
+    @app.get("/api/desk/intraday/search", dependencies=[Depends(require_auth)])
+    def search_trades(
+        date_from: str | None = Query(None, alias="from", pattern=DATE_PATTERN),
+        date_to: str | None = Query(None, alias="to", pattern=DATE_PATTERN),
+        symbol: str | None = Query(None, pattern=r"^[A-Za-z0-9&.\- ]{0,20}$"),
+        side: str | None = Query(None, pattern="^(long|short)$"),
+        outcome: str | None = Query(None, pattern="^(won|lost|flat|open)$"),
+        kind: str | None = Query(None, pattern=r"^[A-Za-z0-9_ ]{0,20}$"),
+        index: str | None = Query(None, pattern="^(nifty50|niftybank)$"),
+        limit: int = Query(400, ge=1, le=800),
+    ) -> dict[str, Any]:
+        """Trades across all filed days, listed date by date (newest first). ``from``/``to`` are the
+        dates the trades were taken. Every filter is optional and they combine."""
+        from src.alphadesk.intraday import days
+
+        _range(date_from, date_to)
+        return {"ok": True, "data": days.search(date_from, date_to, symbol, side, outcome, kind, index, limit)}
 
     @app.get("/api/desk/intraday/day/{day}", dependencies=[Depends(require_auth)])
     def get_day(day: str = Path(pattern=DATE_PATTERN)) -> dict[str, Any]:

@@ -57,6 +57,10 @@ _LOCKS: dict[str, threading.Lock] = defaultdict(threading.Lock)
 _RUNNING: dict[str, str] = {}
 
 
+class MarketClosed(Exception):
+    """NSE had no session on the day (a holiday the server has no list for). Nothing is filed."""
+
+
 def days_dir() -> Path:
     path = ibars.intraday_dir() / "days"
     path.mkdir(parents=True, exist_ok=True)
@@ -324,6 +328,15 @@ def evaluate(d: date, rec: dict, settings: dict, live_now: datetime | None) -> d
             "as_of": clock(last_bar) if last_bar else None, "_frames": days}
 
 
+def session_state(d: date, live: bool) -> str:
+    """``open`` if the Nifty traded on ``d``, ``closed`` if prices exist for other days but not this
+    one (a holiday), ``unknown`` if no prices came back at all (an outage must not look like a holiday)."""
+    frame = ibars.fetch_ticker("^NSEI", "5d" if live else "60d", ttl=0 if live else 600)
+    if frame.empty:
+        return "unknown"
+    return "open" if (frame.index.date == d).any() else "closed"
+
+
 def classify_day(d: date, live: bool) -> dict | None:
     out = {}
     for key, ticker in (("nifty50", "^NSEI"), ("niftybank", "^NSEBANK")):
@@ -348,6 +361,9 @@ def _run(d: date, kind: str, source: str, fn) -> dict:
         try:
             note = fn(rec)
             _log(rec, kind, True, note, source)
+        except MarketClosed:
+            (days_dir() / f"{key}.json").unlink(missing_ok=True)  # a holiday leaves no record
+            raise
         except Exception as exc:  # noqa: BLE001 - recorded on the day, then re-raised for the caller
             _log(rec, kind, False, f"{type(exc).__name__}: {exc}", source)
             save_day(rec)
@@ -391,6 +407,8 @@ def run_refresh(d: date, source: str = "manual", now: datetime | None = None) ->
 
 
 def _settle(rec: dict, d: date, live: bool) -> str:
+    if session_state(d, live) == "closed":
+        raise MarketClosed(f"NSE had no session on {d.isoformat()}")
     ev = evaluate(d, rec, rec["settings"], None)
     frames = ev.pop("_frames")
     _apply(rec, ev, rec["settings"])
@@ -432,8 +450,9 @@ def run_replay(d: date, source: str = "manual") -> dict:
 
 def backfill(start: date, end: date, source: str = "backfill", force: bool = False) -> dict:
     """File every NSE trading day in [start, end] by replaying it from stored prices, oldest first.
-    Settled days are kept unless ``force``; a day that cannot be built is reported, not fatal."""
-    done, skipped, failed = [], [], []
+    Settled days are kept unless ``force``; a day that cannot be built is reported, not fatal, and
+    days the market was closed are listed separately and filed as nothing."""
+    done, skipped, failed, closed = [], [], [], []
     d = start
     today = ibars.now_ist().date()
     while d <= min(end, today - timedelta(days=1)):
@@ -445,23 +464,47 @@ def backfill(start: date, end: date, source: str = "backfill", force: bool = Fal
                 try:
                     run_replay(d, source)
                     done.append(d.isoformat())
+                except MarketClosed:
+                    closed.append(d.isoformat())  # a holiday: nothing to file
                 except Exception as exc:  # noqa: BLE001 - one bad day must not stop the rest
                     failed.append({"date": d.isoformat(), "error": f"{type(exc).__name__}: {exc}"})
         d += timedelta(days=1)
-    return {"filed": done, "kept": skipped, "failed": failed}
+    return {"filed": done, "kept": skipped, "failed": failed, "closed": closed}
+
+
+_CACHE: dict[str, tuple[int, int, dict]] = {}
+
+
+def _records(newest_first: bool = True) -> list[dict]:
+    """Every filed day, parsed once per file version (the page asks several times per load)."""
+    out = []
+    for path in sorted(days_dir().glob("*.json"), reverse=newest_first):
+        try:
+            st = path.stat()
+        except FileNotFoundError:
+            continue
+        hit = _CACHE.get(str(path))
+        if not hit or hit[0] != st.st_mtime_ns or hit[1] != st.st_size:
+            try:
+                hit = (st.st_mtime_ns, st.st_size, json.loads(path.read_text()))
+            except json.JSONDecodeError:
+                continue
+            _CACHE[str(path)] = hit
+        out.append(hit[2])
+    return out
 
 
 # --- reading back --------------------------------------------------------------------------------
 
 
-def list_days(limit: int = 400) -> list[dict]:
+def list_days(limit: int = 400, date_from: str | None = None, date_to: str | None = None) -> list[dict]:
     rows = []
     current = load_settings()
-    for path in sorted(days_dir().glob("*.json"), reverse=True)[:limit]:
-        try:
-            r = json.loads(path.read_text())
-        except json.JSONDecodeError:
+    for r in _records():
+        if (date_from and r["date"] < date_from) or (date_to and r["date"] > date_to):
             continue
+        if len(rows) >= limit:
+            break
         s = r.get("summary") or {}
         rows.append({"date": r["date"], "weekday": r.get("weekday"), "status": r["status"],
                      "type": (r.get("day") or {}).get("type"), "label": (r.get("day") or {}).get("label"),
@@ -472,16 +515,74 @@ def list_days(limit: int = 400) -> list[dict]:
     return rows
 
 
+def _outcome(t: dict) -> str:
+    if t["status"] == "open":
+        return "open"
+    return "won" if t["r_net"] > 0 else "lost" if t["r_net"] < -0.05 else "flat"
+
+
+_SLIM = ("id", "symbol", "side", "tags", "decided_at", "entry", "stop", "target", "qty", "status",
+         "exit_time", "last_price", "last_time", "r_net", "pnl_inr", "mfe_r", "mae_r")
+
+
+def search(date_from: str | None = None, date_to: str | None = None, symbol: str | None = None,
+           side: str | None = None, outcome: str | None = None, kind: str | None = None,
+           index: str | None = None, limit_days: int = 400) -> dict:
+    """Trades across filed days, listed date by date, newest first.
+
+    ``date_from`` / ``date_to`` are the dates the trades were taken (inclusive, YYYY-MM-DD).
+    ``symbol`` matches part of a name, ``side`` is long/short, ``outcome`` is won/lost/flat/open,
+    ``kind`` is a day type or its label (e.g. ``trend_up`` / "Trend up"), ``index`` is nifty50 or
+    niftybank. Days with no matching trade are left out. Paths are dropped: open the day for them.
+    """
+    sym = (symbol or "").strip().upper()
+    kind_l = (kind or "").strip().lower()
+    out_days, tot = [], {"trades": 0, "wins": 0, "losses": 0, "flat": 0, "open": 0, "net_inr": 0.0, "net_r": 0.0}
+    truncated = False
+    current = load_settings()
+    for r in _records():
+        d = r["date"]
+        if (date_from and d < date_from) or (date_to and d > date_to):
+            continue
+        day = r.get("day") or {}
+        if kind_l and kind_l not in (str(day.get("type", "")).lower(), str(day.get("label", "")).lower()):
+            continue
+        hits = []
+        for t in r.get("trades") or []:
+            if sym and sym not in t["symbol"]:
+                continue
+            if side in ("long", "short") and t["side"] != side:
+                continue
+            if outcome in ("won", "lost", "flat", "open") and _outcome(t) != outcome:
+                continue
+            if index and index not in (t.get("tags") or []):
+                continue
+            hits.append({k: t.get(k) for k in _SLIM} | {"outcome": _outcome(t)})
+        if not hits:
+            continue
+        if len(out_days) >= limit_days:
+            truncated = True
+            break
+        cnt = {k: sum(1 for h in hits if h["outcome"] == o) for k, o in (("wins", "won"), ("losses", "lost"), ("flat", "flat"), ("open", "open"))}
+        net_inr = round(sum(h["pnl_inr"] for h in hits), 2)
+        net_r = round(sum(h["r_net"] for h in hits), 3)
+        out_days.append({"date": d, "weekday": r.get("weekday"), "status": r["status"], "label": day.get("label"),
+                         "type": day.get("type"), "rules_match": rules_match(r.get("settings"), current),
+                         "summary": {"trades": len(hits), **cnt, "net_inr": net_inr, "net_r": net_r}, "trades": hits})
+        tot["trades"] += len(hits)
+        for k in ("wins", "losses", "flat", "open"):
+            tot[k] += cnt[k]
+        tot["net_inr"] = round(tot["net_inr"] + net_inr, 2)
+        tot["net_r"] = round(tot["net_r"] + net_r, 3)
+    done = tot["wins"] + tot["losses"] + tot["flat"]
+    tot["win_rate"] = round(tot["wins"] / done, 4) if done else None
+    tot["days"] = len(out_days)
+    return {"days": out_days, "totals": tot, "truncated": truncated}
+
+
 def stats() -> dict:
     """Cumulative win ratio over settled days, and how each kind of day did."""
-    recs = []
-    for path in sorted(days_dir().glob("*.json")):
-        try:
-            r = json.loads(path.read_text())
-        except json.JSONDecodeError:
-            continue
-        if r.get("status") == "settled":
-            recs.append(r)
+    recs = [r for r in _records(newest_first=False) if r.get("status") == "settled"]
     current = load_settings()
     mixed = sum(1 for r in recs if not rules_match(r.get("settings"), current))
     series, by_type, by_side, by_tag = [], defaultdict(list), defaultdict(list), defaultdict(list)

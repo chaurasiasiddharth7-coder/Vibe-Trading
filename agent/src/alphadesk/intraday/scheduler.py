@@ -98,6 +98,8 @@ def tick(now: datetime | None = None, runner=run_job) -> list[str]:
         try:
             runner(kind, now)
             ok, note = True, ""
+        except days.MarketClosed:
+            ok, note = True, "market closed today (holiday): nothing filed"
         except Exception as exc:  # noqa: BLE001 - recorded, and the loop must live on
             logger.warning("intraday %s job failed: %s", kind, exc)
             ok, note = False, f"{type(exc).__name__}: {exc}"
@@ -118,6 +120,8 @@ def tick(now: datetime | None = None, runner=run_job) -> list[str]:
             try:
                 days.run_replay(d, "scheduler-catch-up")
                 done.append(f"replay:{d.isoformat()}")
+            except days.MarketClosed:
+                pass  # a holiday: nothing to file, and it is not retried (tried[] already says so)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("catch-up of %s failed: %s", d, exc)
         state["catchup"] = {k: v for k, v in tried.items() if v == today}

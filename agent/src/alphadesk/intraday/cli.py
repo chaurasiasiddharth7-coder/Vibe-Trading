@@ -254,7 +254,8 @@ def cmd_backfill(args) -> int:
     end = date.fromisoformat(args.end) if args.end else ibars.now_ist().date() - timedelta(days=1)
     start = date.fromisoformat(args.start) if args.start else end - timedelta(days=args.days)
     res = days.backfill(start, end, "cli", force=args.force)
-    print(f"filed {len(res['filed'])} days, kept {len(res['kept'])} already settled, {len(res['failed'])} failed")
+    print(f"filed {len(res['filed'])} days, kept {len(res['kept'])} already settled, "
+          f"{len(res['closed'])} market-closed days skipped, {len(res['failed'])} failed")
     for f in res["failed"][:10]:
         print("  failed:", f["date"], f["error"])
     return 0 if not res["failed"] else 1

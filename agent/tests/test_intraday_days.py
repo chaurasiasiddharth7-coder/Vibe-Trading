@@ -291,23 +291,112 @@ def test_api_roundtrip(env, monkeypatch):
         app.dependency_overrides.clear()
 
 
-def test_backfill_files_trading_days_skips_settled_and_survives_a_bad_day(env, monkeypatch):
-    # "today" is Tue 6 Oct (env fixture); ask for the previous week
+def test_backfill_files_open_days_skips_settled_and_closed_and_survives_a_bad_day(env, monkeypatch):
+    # In this world the Nifty only traded on Fri 2 Oct and Mon 5 Oct; "today" is Tue 6 Oct.
     res = days.backfill(date(2026, 9, 28), date(2026, 10, 5), "test")
-    assert len(res["filed"]) + len(res["failed"]) == 6 and res["kept"] == []  # Mon 28 Sep .. Mon 5 Oct, weekdays only
+    assert res["filed"] == ["2026-10-02", "2026-10-05"] and res["failed"] == []
+    assert res["closed"] == ["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01"]  # holidays: nothing filed
+    assert days.load_day(date(2026, 9, 30)) is None
     again = days.backfill(date(2026, 9, 28), date(2026, 10, 5), "test")
-    assert again["filed"] == [] and len(again["kept"]) == len(res["filed"])
+    assert again["filed"] == [] and again["kept"] == ["2026-10-02", "2026-10-05"]
     forced = days.backfill(date(2026, 10, 5), date(2026, 10, 5), "test", force=True)
     assert forced["filed"] == ["2026-10-05"]
     orig = days.run_replay
 
     def flaky(d, source="x"):
-        if d == date(2026, 10, 1):
+        if d == date(2026, 10, 2):
             raise RuntimeError("no prices")
         return orig(d, source)
     monkeypatch.setattr(days, "run_replay", flaky)
-    res = days.backfill(date(2026, 9, 30), date(2026, 10, 2), "test", force=True)
-    assert [f["date"] for f in res["failed"]] == ["2026-10-01"] and len(res["filed"]) == 2
+    res = days.backfill(date(2026, 10, 2), date(2026, 10, 5), "test", force=True)
+    assert [f["date"] for f in res["failed"]] == ["2026-10-02"] and res["filed"] == ["2026-10-05"]
+
+
+def test_a_holiday_files_nothing_and_an_outage_is_not_mistaken_for_one(env, monkeypatch):
+    holiday = date(2026, 9, 30)  # the fake Nifty has other days but not this one
+    with pytest.raises(days.MarketClosed):
+        days.run_close(holiday, "test")
+    assert days.load_day(holiday) is None and days.list_days() == []
+    monkeypatch.setattr(ibars, "fetch_ticker", lambda *a, **k: pd.DataFrame())  # no prices at all: an outage
+    assert days.session_state(D, False) == "unknown"
+    rec = days.run_replay(D, "test")  # carries on and says what it could and could not do
+    assert rec["status"] == "settled" and rec["day"] is None
+
+
+def test_the_scheduler_treats_a_closed_market_as_a_pass_not_a_failure(env, monkeypatch):
+    monkeypatch.setattr(scheduler, "_recent_unsettled", lambda now, n=3: [])
+
+    def runner(kind, now):
+        raise days.MarketClosed("holiday")
+    assert scheduler.tick(at(15, 41), runner) == ["close"]
+    st = scheduler.load_state()["close"]
+    assert st["ok"] is True and "market closed" in st["note"]
+
+
+# --- search: date range and date-wise listing ------------------------------------------------------
+
+
+@pytest.fixture
+def two_days(env, monkeypatch):
+    """Day D (AAA long wins, BBB short loses) and a second filed day with one trade."""
+    days.run_replay(D, "test")
+    other = days.load_day(D)
+    other["date"], other["weekday"] = "2026-09-30", "Wednesday"
+    other["day"] = {**other["day"], "type": "range", "label": "Range day"}
+    other["trades"] = [dict(other["trades"][1], id="2026-09-30-BBB-short", tags=["niftybank"])]
+    days.save_day(other)
+    return other
+
+
+def test_search_lists_trades_date_by_date_newest_first(env, two_days):
+    res = days.search()
+    assert [d["date"] for d in res["days"]] == ["2026-10-05", "2026-09-30"]
+    assert res["totals"]["trades"] == 3 and res["totals"]["days"] == 2
+    first = res["days"][0]
+    assert first["label"] == "Trend up" and first["summary"]["trades"] == 2
+    assert "path" not in first["trades"][0] and first["trades"][0]["outcome"] in ("won", "lost", "flat", "open")
+
+
+def test_search_filters_by_date_invested(env, two_days):
+    assert [d["date"] for d in days.search(date_from="2026-10-01")["days"]] == ["2026-10-05"]
+    assert [d["date"] for d in days.search(date_to="2026-09-30")["days"]] == ["2026-09-30"]
+    both = days.search(date_from="2026-09-30", date_to="2026-10-05")
+    assert both["totals"]["days"] == 2
+    assert days.search(date_from="2026-10-06")["days"] == []  # nothing after the last filed day
+
+
+def test_search_filters_by_symbol_side_result_kind_and_index(env, two_days):
+    assert {t["symbol"] for d in days.search(symbol="aa")["days"] for t in d["trades"]} == {"AAA"}
+    assert all(t["side"] == "short" for d in days.search(side="short")["days"] for t in d["trades"])
+    won = days.search(outcome="won")
+    assert won["totals"]["wins"] == 1 and won["totals"]["trades"] == 1 and won["days"][0]["date"] == "2026-10-05"
+    lost = days.search(outcome="lost")
+    assert lost["totals"]["trades"] == 2 and {d["date"] for d in lost["days"]} == {"2026-10-05", "2026-09-30"}
+    assert [d["date"] for d in days.search(kind="range")["days"]] == ["2026-09-30"]
+    assert [d["date"] for d in days.search(kind="Trend up")["days"]] == ["2026-10-05"]
+    assert {t["symbol"] for d in days.search(index="niftybank")["days"] for t in d["trades"]} == {"BBB"}
+    combo = days.search(date_from="2026-10-01", side="long", outcome="won", index="nifty50")
+    assert combo["totals"]["trades"] == 1 and combo["totals"]["win_rate"] == 1.0
+
+
+def test_search_totals_add_up_and_the_day_limit_is_reported(env, two_days):
+    res = days.search()
+    assert res["totals"]["net_inr"] == pytest.approx(sum(d["summary"]["net_inr"] for d in res["days"]), abs=0.01)
+    capped = days.search(limit_days=1)
+    assert len(capped["days"]) == 1 and capped["truncated"] is True and days.search()["truncated"] is False
+
+
+def test_the_record_cache_follows_file_changes(env, two_days):
+    assert days.list_days()[0]["taken"] == 2
+    rec = days.load_day(D)
+    rec["summary"]["taken"] = 99
+    days.save_day(rec)
+    assert days.list_days()[0]["taken"] == 99  # a changed file is re-read, not served stale
+
+
+def test_list_days_filters_by_date(env, two_days):
+    assert [r["date"] for r in days.list_days(date_from="2026-10-01")] == ["2026-10-05"]
+    assert [r["date"] for r in days.list_days(date_to="2026-09-30")] == ["2026-09-30"]
 
 
 def test_days_filed_under_other_rules_are_flagged_not_blended_silently(env):
@@ -322,3 +411,24 @@ def test_days_filed_under_other_rules_are_flagged_not_blended_silently(env):
     days.save_settings({"max_trades": 2})
     days.backfill(D, D, "test", force=True)
     assert days.stats()["mixed_rules"] == 0 and days.list_days()[0]["taken"] <= 2
+
+
+def test_api_search_and_date_filters(env, two_days):
+    import api_server
+    from fastapi.testclient import TestClient
+    app = api_server.app
+    app.dependency_overrides[api_server.require_auth] = lambda: None
+    try:
+        c = TestClient(app)
+        r = c.get("/api/desk/intraday/search").json()["data"]
+        assert [d["date"] for d in r["days"]] == ["2026-10-05", "2026-09-30"] and r["totals"]["trades"] == 3
+        r = c.get("/api/desk/intraday/search?from=2026-10-01&side=long&outcome=won").json()["data"]
+        assert r["totals"]["trades"] == 1 and r["days"][0]["trades"][0]["symbol"] == "AAA"
+        r = c.get("/api/desk/intraday/search?symbol=bb&index=niftybank&kind=range").json()["data"]
+        assert [d["date"] for d in r["days"]] == ["2026-09-30"]
+        assert [d["date"] for d in c.get("/api/desk/intraday/days?from=2026-10-01").json()["data"]] == ["2026-10-05"]
+        assert c.get("/api/desk/intraday/search?from=2026-10-05&to=2026-09-30").status_code == 400  # backwards range
+        for bad in ("from=yesterday", "side=up", "outcome=maybe", "index=sensex", "symbol=%3Cscript%3E", "limit=0", "kind=a%3Bb"):
+            assert c.get(f"/api/desk/intraday/search?{bad}").status_code == 422, bad
+    finally:
+        app.dependency_overrides.clear()
