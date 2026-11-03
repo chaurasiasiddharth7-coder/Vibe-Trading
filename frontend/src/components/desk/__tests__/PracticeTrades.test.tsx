@@ -197,3 +197,37 @@ describe("PracticeTrades date invested", () => {
     expect(symbols()).toHaveLength(3);
   });
 });
+
+describe("practice report", () => {
+  const closed = (id: string, openedAt: string, exit: string, pnl: number): PaperTrade => ({
+    ...base, id, symbol: id.toUpperCase(), opened_at: openedAt, status: "CLOSED",
+    exit_date: exit, exit_reason: pnl > 0 ? "target" : "stop", pnl_inr: pnl, r_multiple: pnl / 30,
+  });
+  const ledger = [
+    closed("won", "2026-10-13T05:00:00Z", "2026-10-14", 60),
+    closed("lost", "2026-10-14T05:00:00Z", "2026-10-16", -30),
+  ];
+
+  it("shows the win rate with its count and the day by day list", () => {
+    setup(ledger);
+    expect(screen.getByText("50%", { selector: "span.font-mono" })).toBeInTheDocument();
+    expect(screen.getByText(/won, of 2 finished trades over 2 days/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Fri, 16 Oct|Fri 16 Oct/ })).toBeInTheDocument();
+    expect(screen.getByText(/judge this on at least 30 finished trades/)).toBeInTheDocument();
+  });
+
+  it("pressing a day lists the trades invested that day, and pressing it again clears", async () => {
+    setup(ledger);
+    const day13 = screen.getByRole("button", { name: /13 Oct/ });
+    await userEvent.click(day13);
+    expect(screen.getByText(/Showing 1 of 2 trades invested/)).toBeInTheDocument();
+    expect(day13).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(day13);
+    expect(screen.queryByText(/Showing 1 of 2 trades invested/)).not.toBeInTheDocument();
+  });
+
+  it("says so when nothing has finished yet", () => {
+    setup([base]);
+    expect(screen.getByText(/No finished trades yet/)).toBeInTheDocument();
+  });
+});

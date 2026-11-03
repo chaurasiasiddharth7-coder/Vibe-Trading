@@ -3,6 +3,7 @@ import { backwards, groupByInvested, inInvestedRange } from "@/components/desk/t
 import { dayLabel } from "@/lib/intraday";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 import type { ExitPlan, PaperTrade } from "@/lib/api";
+import { PracticeReport } from "@/components/desk/PracticeReport";
 import { SymbolInsight } from "@/components/desk/SymbolInsight";
 import { scoreIdea, type TradeScore } from "@/components/desk/score";
 import { cn } from "@/lib/utils";
@@ -747,6 +748,12 @@ export function PracticeTrades({
                   <dd className="font-mono text-base">{inr(sum(openTrades.map((t) => t.qty * t.entry)), 0)}</dd>
                 </div>
               </dl>
+
+              <PracticeReport
+                trades={trades}
+                selected={from !== "" && from === to ? from : ""}
+                onPickDay={(d) => { const same = from === d && to === d; setFrom(same ? "" : d); setTo(same ? "" : d); }}
+              />
 
               <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter trades">
                 {(["all", "open", "closed"] as const).map((f) => (

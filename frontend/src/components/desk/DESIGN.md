@@ -174,3 +174,19 @@ A section under the two columns, always visible, one job: find trades across eve
 - A11y: header buttons ≥44px, results region is `aria-live="polite"` so a new result count is announced, labels on every input.
 
 The practice-trades list on the Dashboard gets the same idea in miniature: From and To on the date a trade was invested (opened) and a "list by date invested" switch that puts each date under its own heading with that date's result.
+
+### Practice report (Guide page, above the practice trades)
+
+The same one-glance report the Intraday page gives, for the fake-money trades the user places by hand or from the board. One job: show how those trades have done, day by day, without opening each trade.
+
+- Placement: inside "My practice trades", between the four summary tiles and the filters. A native `<details>`, open by default (no stored state).
+- Order: summary line, cumulative win-ratio line, day-by-day list, then three small tables (Buy vs Short, How trades ended, Open now).
+- Summary line: win rate always beside its count ("38% won, of 20 trades over 6 days"), then net ₹ and net R. No bare percentages.
+- Day by day: one row per date a trade was opened or closed, newest first, 30 at a time with "Show more days". Row = date, "opened N · closed M", win rate with its count, net ₹ of trades that closed that day. A day with only openings shows "—" for the result, never ₹0. Results belong to the close date, openings to the invested date, and the sentence above the list says so.
+- Pressing a day row sets the existing From/To "Invested" inputs to that date, so the trades below filter by the day they were invested; pressing it again clears them. No new route.
+- Chart: plain SVG, cumulative win ratio, reusing the Intraday geometry; 50% dashed line when inside the axis range; end label. Needs 2+ closing days, otherwise a sentence.
+- Honesty copy: under the summary, "Fake money. Small samples swing a lot: judge this on at least 30 closed trades." Shown while fewer than 30 trades are closed.
+- Motion budget (3D: none, internal tool): none added. The row tint (150ms ease-out, `motion-reduce:transition-none`) is the only transition. No count-up, no animated chart draw.
+- Motion storyboard: (1) page load: report renders in its final state, no entrance; (2) press a day: the list below re-filters instantly, focus stays on the pressed row; (3) open or close the report: the browser's native `<details>`, no animation.
+- A11y: chart is `role="img"` with a one-sentence `aria-label`; day rows are buttons ≥44px with `aria-pressed`; ₹ and R carry a +/− sign so colour is never the only signal; tables have header cells.
+- Don't: cards inside cards, gradients, glow, new hues (reuse the emerald/rose already on the page), rounded-full pills.
