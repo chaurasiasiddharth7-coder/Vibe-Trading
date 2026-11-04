@@ -677,6 +677,20 @@ export function PracticeTrades({
             )}
           </div>
         </div>
+        <dl className="grid grid-cols-5 gap-x-2 px-3 pb-2 text-[11px] leading-tight" aria-label={`${t.symbol} prices`}>
+          {[
+            ["Bought at", inr(t.entry), ""],
+            [t.status === "OPEN" ? "Now" : "Sold at", inr(t.status === "OPEN" ? t.current_price : t.exit_price), ""],
+            ["Target", inr(t.target), "text-emerald-400"],
+            ["Cut-loss", inr(t.status === "OPEN" ? (t.stop_now ?? t.stop) : t.stop), "text-rose-400"],
+            ["Qty", String(t.qty), ""],
+          ].map(([label, value, tone]) => (
+            <div key={label} className="min-w-0">
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className={cn("font-mono text-xs truncate", tone)}>{value}</dd>
+            </div>
+          ))}
+        </dl>
         {glanceId === t.id && <Glance t={t} />}
         {isOpen && <Detail t={t} onChangePlan={onChangePlan} planBusy={planBusy === t.id} />}
       </li>
