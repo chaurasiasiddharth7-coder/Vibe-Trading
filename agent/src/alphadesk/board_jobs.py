@@ -14,6 +14,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from src.alphadesk import profiles
+
 logger = logging.getLogger(__name__)
 
 _JOBS: dict[str, dict[str, Any]] = {}
@@ -43,7 +45,7 @@ def load_last(universe: str) -> dict[str, Any] | None:
 def _start(kind: str, key: str, work: Callable[[Callable[[int, int], None]], Any]) -> str:
     with _LOCK:
         for job in _JOBS.values():
-            if job["kind"] == kind and job["key"] == key and job["status"] == "running":
+            if job["kind"] == kind and job["key"] == key and job["status"] == "running" and job.get("profile") == profiles.current_id():
                 return job["id"]
         if len(_JOBS) >= _MAX_JOBS:
             for old in [j for j in _JOBS.values() if j["status"] != "running"][: len(_JOBS) - _MAX_JOBS + 1]:
@@ -53,6 +55,7 @@ def _start(kind: str, key: str, work: Callable[[Callable[[int, int], None]], Any
             "id": job_id,
             "kind": kind,
             "key": key,
+            "profile": profiles.current_id(),
             "status": "running",
             "done": 0,
             "total": 0,
@@ -72,7 +75,7 @@ def _start(kind: str, key: str, work: Callable[[Callable[[int, int], None]], Any
             logger.exception("board job %s failed", job_id)
             _JOBS[job_id].update(status="failed", error=str(exc))
 
-    threading.Thread(target=run, name=f"board-{kind}-{key}", daemon=True).start()
+    threading.Thread(target=profiles.carry(run), name=f"board-{kind}-{key}", daemon=True).start()
     return job_id
 
 
@@ -111,4 +114,6 @@ def start_replay(universe: str) -> str:
 
 def status(job_id: str) -> dict[str, Any] | None:
     job = _JOBS.get(job_id)
-    return dict(job) if job else None
+    if not job or job.get("profile") != profiles.current_id():
+        return None  # another profile's job looks like no job
+    return {k: v for k, v in job.items() if k != "profile"}

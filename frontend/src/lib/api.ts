@@ -1,4 +1,5 @@
 import { authHeaders, withAuthTicket } from "@/lib/apiAuth";
+import type { DeskMe, DeskPrefs } from "@/lib/deskPrefs";
 
 const BASE = "";
 
@@ -524,6 +525,9 @@ export const api = {
       "/api/desk/board/settle",
       { method: "POST", body: "{}" },
     ),
+  getMe: () => request<{ ok: boolean; data: DeskMe }>("/api/desk/me"),
+  putMyPrefs: (prefs: DeskPrefs) =>
+    request<{ ok: boolean; data: DeskPrefs }>("/api/desk/me/prefs", { method: "PUT", body: JSON.stringify(prefs) }),
   getUniverses: () =>
     request<{ ok: boolean; data: Array<{ key: string; label: string }> }>("/api/desk/universes"),
   postBoardScan: (body: { universe: string; include_funds: boolean }) =>

@@ -21,6 +21,7 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from src.alphadesk import profiles
 from src.alphadesk.intraday import bars as ibars
 from src.alphadesk.intraday import calendar as cal
 from src.alphadesk.intraday import days
@@ -129,12 +130,19 @@ def tick(now: datetime | None = None, runner=run_job) -> list[str]:
     return done
 
 
+def tick_all(now: datetime | None = None) -> None:
+    """One tick for the owner and for every profile, each on its own settings, state and folder."""
+    for pid in profiles.all_ids():
+        try:
+            with profiles.use(pid):
+                tick(now)
+        except Exception:  # noqa: BLE001 - one person's failure must not stop the others
+            logger.exception("intraday scheduler tick failed for %s", pid or "owner")
+
+
 def _loop() -> None:
     while True:
-        try:
-            tick()
-        except Exception:  # noqa: BLE001
-            logger.exception("intraday scheduler tick failed")
+        tick_all()
         time.sleep(TICK_SECONDS)
 
 

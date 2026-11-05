@@ -14,6 +14,8 @@ from datetime import date as date_cls
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
+from src.alphadesk import profiles
+
 AuthDep = Callable[..., Awaitable[Any] | Any]
 
 
@@ -175,7 +177,7 @@ def register_intraday_routes(app: FastAPI, require_auth: AuthDep) -> None:
             except Exception:  # noqa: BLE001 - recorded on the day's run log by the engine
                 pass
 
-        threading.Thread(target=work, name=f"intraday-{kind}-{d}", daemon=True).start()
+        threading.Thread(target=profiles.carry(work), name=f"intraday-{kind}-{d}", daemon=True).start()
         return {"ok": True, "started": kind, "date": d.isoformat()}
 
     @app.post("/api/desk/intraday/backfill", dependencies=[Depends(require_auth)])
@@ -191,13 +193,14 @@ def register_intraday_routes(app: FastAPI, require_auth: AuthDep) -> None:
         end = now_ist().date() - timedelta(days=1)
 
         def work() -> None:
-            days._RUNNING[now_ist().date().isoformat()] = "backfill"
+            flag = profiles.scoped_key(now_ist().date().isoformat())
+            days._RUNNING[flag] = "backfill"
             try:
                 days.backfill(end - timedelta(days=days_back), end, "backfill", force=force)
             finally:
-                days._RUNNING.pop(now_ist().date().isoformat(), None)
+                days._RUNNING.pop(flag, None)
 
-        threading.Thread(target=work, name="intraday-backfill", daemon=True).start()
+        threading.Thread(target=profiles.carry(work), name="intraday-backfill", daemon=True).start()
         return {"ok": True, "started": "backfill", "days": days_back}
 
     @app.get("/api/desk/intraday/stats", dependencies=[Depends(require_auth)])

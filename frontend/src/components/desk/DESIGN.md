@@ -190,3 +190,21 @@ The same one-glance report the Intraday page gives, for the fake-money trades th
 - Motion storyboard: (1) page load: report renders in its final state, no entrance; (2) press a day: the list below re-filters instantly, focus stays on the pressed row; (3) open or close the report: the browser's native `<details>`, no animation.
 - A11y: chart is `role="img"` with a one-sentence `aria-label`; day rows are buttons ≥44px with `aria-pressed`; ₹ and R carry a +/− sign so colour is never the only signal; tables have header cells.
 - Don't: cards inside cards, gradients, glow, new hues (reuse the emerald/rose already on the page), rounded-full pills.
+
+## `/dashboard` — Profiles and Customize
+
+**Who it is for:** a person with their own desk (a test user such as Ayushi, a client) next to the owner. Same pages, own data, own view.
+
+**Data:** each profile has its own folder (`~/.vibe-trading/desk_profiles/<id>/alphadesk`): practice trades, intraday days and rules, caches, and `prefs.json`. The owner's desk is unchanged. A profile key only opens `/api/desk/*`, `/api/analysis/*` and `/api/kronos/*`, never live trading, audit export, settings or agent runs.
+
+**Customize (one disclosure under the header, closed by default):**
+1. Choices: page (Tabs / One page), spacing (Comfortable / Compact), summary tiles (Cards / One line).
+2. Three tick-box dropdowns: Sections, Filters, Information rows. Each shows "n of m shown", has Show all / Hide all, closes on Esc or an outside click.
+3. Summary tiles list: tick to show, arrows to reorder (no drag, so it works by keyboard).
+4. "Back to the standard view". Changes apply at once and save to the profile after half a second ("Saved to your profile").
+
+**Rules:** unticked lists store what is *hidden*, so tiles or rows added later appear by themselves. At least one tab always stays. A hidden filter stops filtering (a date range nobody can clear must not hide trades). Defaults reproduce the pre-profile dashboard exactly.
+
+**Motion storyboard:** no new motion. The dropdown chevron turns 180° in 150 ms (ease-out, off under reduced motion). Layout switches are instant.
+
+**Motion budget (3D: none, internal tool):** unchanged from the Desk rules above.

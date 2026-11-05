@@ -35,7 +35,9 @@ def _outcome_path(signal_id: str) -> Path:
 
 
 def alphadesk_root() -> Path:
-    root = Path.home() / ".vibe-trading" / "alphadesk"
+    from src.alphadesk.profiles import current_id, root_for
+
+    root = root_for(current_id())
     root.mkdir(parents=True, exist_ok=True)
     (root / "signals").mkdir(exist_ok=True)
     (root / "outcomes").mkdir(exist_ok=True)

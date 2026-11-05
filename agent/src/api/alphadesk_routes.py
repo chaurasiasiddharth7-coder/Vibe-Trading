@@ -36,6 +36,29 @@ def register_alphadesk_routes(
             )
         require_auth = host.require_auth
 
+    @app.get("/api/desk/me", dependencies=[Depends(require_auth)])
+    def get_me() -> dict[str, Any]:
+        """Who is signed in and how they want the dashboard laid out."""
+        from src.alphadesk import profiles
+
+        pid = profiles.current_id()
+        info = profiles.get(pid) if pid else None
+        return {
+            "ok": True,
+            "data": {
+                "id": pid,
+                "name": (info or {}).get("name") or "Owner",
+                "is_owner": pid is None,
+                "prefs": profiles.load_prefs(),
+            },
+        }
+
+    @app.put("/api/desk/me/prefs", dependencies=[Depends(require_auth)])
+    def put_my_prefs(body: dict[str, Any]) -> dict[str, Any]:
+        from src.alphadesk import profiles
+
+        return {"ok": True, "data": profiles.save_prefs(body)}
+
     @app.get("/api/analysis/{symbol}", dependencies=[Depends(require_auth)])
     def get_analysis(
         symbol: str,

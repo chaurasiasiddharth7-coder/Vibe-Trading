@@ -19,14 +19,20 @@ from src.alphadesk.survival import apply_outcome_to_engine, load_engine, scoreca
 
 ENGINE_ID = "br_pdh_pdl"
 DEFAULT_RISK_INR = 500.0  # sleeve risk unit for pnl_inr ≈ r * risk
-REPLAY_LEDGER_PATH = Path.home() / ".vibe-trading" / "alphadesk" / "replay_ledger.json"
+
+
+def replay_ledger_path() -> Path:
+    from src.alphadesk.store import alphadesk_root
+
+    return alphadesk_root() / "replay_ledger.json"
 
 
 def _load_replay_ledger() -> dict[str, Any]:
     """Load the replay ledger from disk, creating it if it doesn't exist."""
     try:
-        if REPLAY_LEDGER_PATH.is_file():
-            return json.loads(REPLAY_LEDGER_PATH.read_text(encoding="utf-8"))
+        path = replay_ledger_path()
+        if path.is_file():
+            return json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         pass
     return {"replays": []}
@@ -34,8 +40,9 @@ def _load_replay_ledger() -> dict[str, Any]:
 
 def _save_replay_ledger(ledger: dict[str, Any]) -> None:
     """Save the replay ledger to disk."""
-    REPLAY_LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPLAY_LEDGER_PATH.write_text(
+    path = replay_ledger_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
         json.dumps(ledger, indent=2), encoding="utf-8"
     )
 

@@ -28,6 +28,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from src.alphadesk import profiles
 from src.alphadesk.intraday import bars as ibars
 from src.alphadesk.intraday import calendar as cal
 from src.alphadesk.intraday import daytype, scanner, universe
@@ -154,7 +155,7 @@ def new_record(d: date, settings: dict) -> dict:
 
 
 def is_running(d: date) -> str | None:
-    return _RUNNING.get(d.isoformat())
+    return _RUNNING.get(profiles.scoped_key(d.isoformat()))
 
 
 def _log(rec: dict, kind: str, ok: bool, note: str, source: str) -> None:
@@ -353,9 +354,10 @@ def classify_day(d: date, live: bool) -> dict | None:
 
 def _run(d: date, kind: str, source: str, fn) -> dict:
     key = d.isoformat()
-    if not _LOCKS[key].acquire(blocking=False):
+    skey = profiles.scoped_key(key)  # the owner and each profile may run the same day at once
+    if not _LOCKS[skey].acquire(blocking=False):
         raise RuntimeError(f"{key} is already being updated")
-    _RUNNING[key] = kind
+    _RUNNING[skey] = kind
     try:
         rec = load_day(d) or new_record(d, load_settings())
         try:
@@ -371,8 +373,8 @@ def _run(d: date, kind: str, source: str, fn) -> dict:
         save_day(rec)
         return rec
     finally:
-        _RUNNING.pop(key, None)
-        _LOCKS[key].release()
+        _RUNNING.pop(skey, None)
+        _LOCKS[skey].release()
 
 
 def _apply(rec: dict, ev: dict, settings: dict) -> None:

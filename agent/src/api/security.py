@@ -402,8 +402,10 @@ def _validate_api_auth(
         _reject_cross_site_browser_request(request)
 
     api_key = _configured_api_key()
+    token = _auth_credential_from_header_or_query(cred, query_api_key, allow_query=allow_query)
+    if token and _bind_desk_profile(token, request, owner_key=api_key):
+        return
     if api_key:
-        token = _auth_credential_from_header_or_query(cred, query_api_key, allow_query=allow_query)
         if not token or not hmac.compare_digest(token, api_key):
             raise HTTPException(status_code=401, detail="Invalid or missing API key")
         return
@@ -414,6 +416,28 @@ def _validate_api_auth(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="API_AUTH_KEY is required for non-local API access",
     )
+
+
+def _bind_desk_profile(token: str, request: Request, *, owner_key: str) -> bool:
+    """A desk profile key opens only the desk routes, and only on that profile's own data.
+
+    Returns True when ``token`` is a profile key (the request is then bound to that profile),
+    False when it is not one (the caller falls back to the owner key / loopback rules).
+    """
+    if owner_key and hmac.compare_digest(token, owner_key):
+        return False
+    from src.alphadesk import profiles
+
+    pid = profiles.profile_for_token(token)
+    if pid is None:
+        if token.startswith(profiles.KEY_PREFIX):
+            # A profile key that was rotated or removed must not fall through to the owner's desk on loopback.
+            raise HTTPException(status_code=401, detail="Invalid or missing API key")
+        return False
+    if not profiles.path_allowed(request.url.path):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This key cannot use that part of the app")
+    profiles.bind(pid)
+    return True
 
 
 def _is_local_client(request: Request) -> bool:

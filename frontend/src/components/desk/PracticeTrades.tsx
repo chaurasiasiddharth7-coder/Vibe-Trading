@@ -7,6 +7,7 @@ import { PracticeReport } from "@/components/desk/PracticeReport";
 import { SymbolInsight } from "@/components/desk/SymbolInsight";
 import { scoreIdea, type TradeScore } from "@/components/desk/score";
 import { cn } from "@/lib/utils";
+import { useDeskPrefs } from "@/lib/deskPrefs";
 import { EXIT_PLANS, historyVerdict, inr, isTrailing, perHundred, planLabel, whatWeSee } from "@/components/desk/plain";
 
 type Filter = "all" | "open" | "closed";
@@ -593,14 +594,19 @@ export function PracticeTrades({
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [byDate, setByDate] = useState(true);
+  const { showFilter, showRow, compact } = useDeskPrefs();
+  // A hidden filter must not keep narrowing the list the person can no longer change.
+  const statusOn = showFilter("status");
+  const datesOn = showFilter("dates");
+  const groupOn = showFilter("group_by_date") ? byDate : true;
 
   const openTrades = trades.filter((t) => t.status === "OPEN");
   const closedTrades = trades.filter((t) => t.status === "CLOSED");
   const sum = (xs: Array<number | null>) => xs.reduce<number>((a, b) => a + (b ?? 0), 0);
-  const byStatus = filter === "open" ? openTrades : filter === "closed" ? closedTrades : trades;
+  const byStatus = !statusOn ? trades : filter === "open" ? openTrades : filter === "closed" ? closedTrades : trades;
   const badRange = backwards(from, to);
-  const shown = badRange ? byStatus : byStatus.filter((t) => inInvestedRange(t, from, to));
-  const dateFiltered = (from !== "" || to !== "") && !badRange;
+  const shown = badRange || !datesOn ? byStatus : byStatus.filter((t) => inInvestedRange(t, from, to));
+  const dateFiltered = datesOn && (from !== "" || to !== "") && !badRange;
 
   const toggle = (id: string) =>
     setExpanded((prev) => {
@@ -621,11 +627,12 @@ export function PracticeTrades({
             aria-expanded={glanceId === t.id}
             aria-label={`${t.symbol} at a glance`}
             onClick={() => setGlanceId(glanceId === t.id ? null : t.id)}
-            className="min-h-12 pl-3 pr-2 text-left w-36 sm:w-44 shrink-0 hover:bg-muted/40"
+            className={cn("pl-3 pr-2 text-left w-36 sm:w-44 shrink-0 hover:bg-muted/40", compact ? "min-h-10" : "min-h-12")}
           >
             <span className="font-semibold underline decoration-dotted underline-offset-4">{t.symbol}</span>
             {(() => {
               const es = entryScoreOf(t);
+              if (!showRow("score_name")) return null;
               return (
                 <span className="block text-xs text-muted-foreground truncate">
                   {es && <span className="font-mono text-foreground">{es.score.toFixed(1)}/10</span>}
@@ -639,26 +646,41 @@ export function PracticeTrades({
             type="button"
             aria-expanded={isOpen}
             onClick={() => toggle(t.id)}
-            className="flex-1 min-w-0 min-h-12 px-2 py-2 grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_1.2fr_1fr_auto] items-center gap-x-3 gap-y-1 text-left hover:bg-muted/40"
+            className={cn(
+              "flex-1 min-w-0 px-2 grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_1.2fr_1fr_auto] items-center gap-x-3 gap-y-1 text-left hover:bg-muted/40",
+              compact ? "min-h-10 py-1" : "min-h-12 py-2",
+            )}
           >
             <span className="text-sm hidden sm:block">
-              {t.side === "LONG" ? "Buy" : "Short"} × {t.qty}
+              {showRow("side_qty") && (
+                <>
+                  {t.side === "LONG" ? "Buy" : "Short"} × {t.qty}
+                </>
+              )}
             </span>
             <span className="font-mono text-sm hidden sm:block whitespace-nowrap">
-              {inr(t.entry)} → {inr(t.status === "OPEN" ? t.current_price : t.exit_price)}
+              {showRow("price_path") && (
+                <>
+                  {inr(t.entry)} → {inr(t.status === "OPEN" ? t.current_price : t.exit_price)}
+                </>
+              )}
             </span>
             <span className="text-xs text-muted-foreground hidden sm:block">
+              {showRow("status_line") && (<>
               {t.status === "OPEN" ? "Open" : (EXIT_LABEL[t.exit_reason ?? ""] ?? "Closed")}
               {t.status === "OPEN" && (t.plan !== "fixed" || (t.stop_now != null && t.stop_now !== t.stop)) && (
                 <span className="block text-[11px]">
                   {isTrailing(t.plan) ? "Trailing" : t.plan === "breakeven" ? "Break-even" : "Moved"} · cut-loss {inr(t.stop_now ?? t.stop, 0)}
                 </span>
               )}
+              </>)}
             </span>
             <span className="flex items-center gap-2 justify-end whitespace-nowrap">
-              <span className={cn("font-mono text-sm", (r ?? 0) > 0 && "text-emerald-400", (r ?? 0) < 0 && "text-rose-400")}>
-                {money(r)}
-              </span>
+              {showRow("result") && (
+                <span className={cn("font-mono text-sm", (r ?? 0) > 0 && "text-emerald-400", (r ?? 0) < 0 && "text-rose-400")}>
+                  {money(r)}
+                </span>
+              )}
               <ChevronDown
                 className={cn("h-4 w-4 text-muted-foreground transition-transform duration-150 ease-out motion-reduce:transition-none", isOpen && "rotate-180")}
                 aria-hidden
@@ -677,20 +699,30 @@ export function PracticeTrades({
             )}
           </div>
         </div>
-        <dl className="grid grid-cols-5 gap-x-2 px-3 pb-2 text-[11px] leading-tight" aria-label={`${t.symbol} prices`}>
-          {[
-            ["Bought at", inr(t.entry), ""],
-            [t.status === "OPEN" ? "Now" : "Sold at", inr(t.status === "OPEN" ? t.current_price : t.exit_price), ""],
-            ["Target", inr(t.target), "text-emerald-400"],
-            ["Cut-loss", inr(t.status === "OPEN" ? (t.stop_now ?? t.stop) : t.stop), "text-rose-400"],
-            ["Qty", String(t.qty), ""],
-          ].map(([label, value, tone]) => (
-            <div key={label} className="min-w-0">
-              <dt className="text-muted-foreground">{label}</dt>
-              <dd className={cn("font-mono text-xs truncate", tone)}>{value}</dd>
-            </div>
-          ))}
-        </dl>
+        {(() => {
+          const cells = [
+            ["price_bought", "Bought at", inr(t.entry), ""],
+            ["price_now", t.status === "OPEN" ? "Now" : "Sold at", inr(t.status === "OPEN" ? t.current_price : t.exit_price), ""],
+            ["price_target", "Target", inr(t.target), "text-emerald-400"],
+            ["price_cutloss", "Cut-loss", inr(t.status === "OPEN" ? (t.stop_now ?? t.stop) : t.stop), "text-rose-400"],
+            ["price_qty", "Qty", String(t.qty), ""],
+          ].filter(([id]) => showRow(id));
+          if (cells.length === 0) return null;
+          return (
+            <dl
+              className="grid gap-x-2 px-3 pb-2 text-[11px] leading-tight"
+              style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0, 1fr))` }}
+              aria-label={`${t.symbol} prices`}
+            >
+              {cells.map(([id, label, value, tone]) => (
+                <div key={id} className="min-w-0">
+                  <dt className="text-muted-foreground">{label}</dt>
+                  <dd className={cn("font-mono text-xs truncate", tone)}>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          );
+        })()}
         {glanceId === t.id && <Glance t={t} />}
         {isOpen && <Detail t={t} onChangePlan={onChangePlan} planBusy={planBusy === t.id} />}
       </li>
@@ -738,6 +770,7 @@ export function PracticeTrades({
             </p>
           ) : (
             <>
+              {showRow("trades_summary") && (
               <dl className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div className="rounded-md bg-muted/50 p-3">
                   <dt className="text-xs text-muted-foreground">Open trades so far</dt>
@@ -762,15 +795,19 @@ export function PracticeTrades({
                   <dd className="font-mono text-base">{inr(sum(openTrades.map((t) => t.qty * t.entry)), 0)}</dd>
                 </div>
               </dl>
+              )}
 
-              <PracticeReport
-                trades={trades}
-                selected={from !== "" && from === to ? from : ""}
-                onPickDay={(d) => { const same = from === d && to === d; setFrom(same ? "" : d); setTo(same ? "" : d); }}
-              />
+              {showFilter("day_report") && (
+                <PracticeReport
+                  trades={trades}
+                  selected={from !== "" && from === to ? from : ""}
+                  onPickDay={(d) => { const same = from === d && to === d; setFrom(same ? "" : d); setTo(same ? "" : d); }}
+                />
+              )}
 
+              {(statusOn || showFilter("expand_all")) && (
               <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter trades">
-                {(["all", "open", "closed"] as const).map((f) => (
+                {statusOn && (["all", "open", "closed"] as const).map((f) => (
                   <button
                     key={f}
                     type="button"
@@ -784,6 +821,7 @@ export function PracticeTrades({
                     {f === "all" ? `All (${trades.length})` : f === "open" ? `Open (${openTrades.length})` : `Finished (${closedTrades.length})`}
                   </button>
                 ))}
+                {showFilter("expand_all") && (
                 <button
                   type="button"
                   onClick={() =>
@@ -793,9 +831,13 @@ export function PracticeTrades({
                 >
                   {expanded.size === shown.length && shown.length > 0 ? "Hide all details" : "Show all details"}
                 </button>
+                )}
               </div>
+              )}
 
+              {(datesOn || showFilter("group_by_date")) && (
               <div className="flex flex-wrap items-end gap-3" role="group" aria-label="Filter by date invested">
+                {datesOn && (<>
                 <label className="text-xs text-muted-foreground space-y-1">
                   <span className="block">Invested from</span>
                   <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="block min-h-9 rounded-md border border-border bg-background px-2 font-mono text-sm text-foreground" />
@@ -807,19 +849,23 @@ export function PracticeTrades({
                 <button type="button" onClick={() => { setFrom(""); setTo(""); }} disabled={!from && !to} className="min-h-9 px-3 rounded-md border border-border text-xs hover:bg-muted disabled:opacity-50">
                   Clear dates
                 </button>
+                </>)}
+                {showFilter("group_by_date") && (
                 <label className="flex items-center gap-2 min-h-9 text-xs text-muted-foreground ml-auto">
                   <input type="checkbox" checked={byDate} onChange={(e) => setByDate(e.target.checked)} className="h-4 w-4" />
                   List by date invested
                 </label>
+                )}
               </div>
-              {badRange && <p role="alert" className="text-xs text-amber-400">The "from" date is after the "to" date, so the dates are ignored.</p>}
+              )}
+              {badRange && datesOn && <p role="alert" className="text-xs text-amber-400">The "from" date is after the "to" date, so the dates are ignored.</p>}
               {dateFiltered && (
                 <p className="text-xs text-muted-foreground" aria-live="polite">
                   Showing {shown.length} of {byStatus.length} trades invested {from ? `from ${dayLabel(from)} ` : ""}{to ? `to ${dayLabel(to)}` : ""}.
                 </p>
               )}
 
-              {byDate && shown.length > 0 ? (
+              {groupOn && shown.length > 0 ? (
                 <div className="space-y-3">
                   {groupByInvested(shown).map((g) => {
                     const total = sum(g.trades.map(resultOf));
@@ -828,8 +874,13 @@ export function PracticeTrades({
                         <h3 className="flex flex-wrap items-baseline justify-between gap-2 px-1 pb-1 text-xs text-muted-foreground">
                           <span className="font-mono text-foreground">{g.date ? dayLabel(g.date) : "Date unknown"}</span>
                           <span>
-                            {g.trades.length} trade{g.trades.length === 1 ? "" : "s"} ·{" "}
-                            <span className={cn("font-mono", total > 0 && "text-emerald-400", total < 0 && "text-rose-400")}>{money(total)}</span>
+                            {g.trades.length} trade{g.trades.length === 1 ? "" : "s"}
+                            {showRow("day_totals") && (
+                              <>
+                                {" · "}
+                                <span className={cn("font-mono", total > 0 && "text-emerald-400", total < 0 && "text-rose-400")}>{money(total)}</span>
+                              </>
+                            )}
                           </span>
                         </h3>
                         <ul className="divide-y divide-border rounded-md border border-border">{g.trades.map(renderRow)}</ul>
@@ -843,10 +894,12 @@ export function PracticeTrades({
               {shown.length === 0 && (
                 <p className="text-sm text-muted-foreground">No practice trades were invested in those dates. Change or clear the dates.</p>
               )}
+              {showRow("footnote") && (
               <p className="text-xs text-muted-foreground">
                 Open results are on paper and change with the price. A trade counts toward the 30-trade track record
                 once it finishes.
               </p>
+              )}
             </>
           )}
         </div>
