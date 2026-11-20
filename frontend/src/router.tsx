@@ -28,6 +28,7 @@ const AlphaZoo = lazy(() =>
 );
 const Dashboard = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const Intraday = lazy(() => import("@/pages/Intraday").then((m) => ({ default: m.Intraday })));
+const Btst = lazy(() => import("@/pages/Btst").then((m) => ({ default: m.Btst })));
 
 function PageLoader() {
   return (
@@ -91,6 +92,7 @@ function RouteError() {
 const dashboardRoutes = [
   { path: "/dashboard", element: wrap(Dashboard) },
   { path: "/intraday", element: wrap(Intraday) },
+  { path: "/btst", element: wrap(Btst) },
   { path: "/guide", element: <Navigate to="/dashboard" replace /> },
   { path: "/desk", element: <Navigate to="/dashboard?tab=chart" replace /> },
 ];

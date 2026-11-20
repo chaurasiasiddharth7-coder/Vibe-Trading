@@ -115,8 +115,8 @@ function savePrefs(p: Prefs) {
 }
 
 const SIDE_TONE: Record<BoardSide, string> = {
-  LONG: "text-emerald-400 border-emerald-700/50",
-  SHORT: "text-rose-400 border-rose-700/50",
+  LONG: "text-emerald-600 dark:text-emerald-400 border-emerald-700/50",
+  SHORT: "text-rose-600 dark:text-rose-400 border-rose-700/50",
   STEER_CLEAR: "text-amber-400 border-amber-700/50",
   NO_EDGE: "text-muted-foreground border-border",
 };
@@ -214,7 +214,7 @@ function TrustCard({
             {pct(h.short.win_rate)} of {h.short.trades} times and {perHundred(h.short.avg_r)}.
           </p>
           {h.short.avg_r != null && h.short.avg_r < 0 && (
-            <p className="text-amber-300 text-xs">
+            <p className="text-amber-700 dark:text-amber-300 text-xs">
               In the past, short ideas lost money with these rules. Treat them with extra caution.
             </p>
           )}
@@ -333,7 +333,7 @@ function IdeaCard({
           <p className="text-xs text-muted-foreground font-mono">
             {inr(row.price)}
             {row.change_percent != null && (
-              <span className={row.change_percent >= 0 ? "text-emerald-400" : "text-rose-400"}>
+              <span className={row.change_percent >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
                 {" "}
                 {row.change_percent >= 0 ? "+" : ""}
                 {row.change_percent}% today
@@ -372,14 +372,14 @@ function IdeaCard({
           {(verdict.positives.length > 0 || verdict.risks.length > 0) && (
             <ul className="text-xs space-y-0.5">
               {verdict.positives.map((t) => (
-                <li key={t} className="text-emerald-300">
+                <li key={t} className="text-emerald-700 dark:text-emerald-300">
                   <span aria-hidden>✓ </span>
                   <span className="sr-only">Good: </span>
                   {t}
                 </li>
               ))}
               {verdict.risks.map((t) => (
-                <li key={t} className="text-amber-300">
+                <li key={t} className="text-amber-700 dark:text-amber-300">
                   <span aria-hidden>! </span>
                   <span className="sr-only">Watch out: </span>
                   {t}
@@ -395,9 +395,9 @@ function IdeaCard({
           {row.side === "LONG" ? "Buy" : "Short"} <span className="font-mono font-semibold">{plan.qty}</span> at{" "}
           <span className="font-mono">{inr(row.entry)}</span>
           <span className="text-muted-foreground"> · </span>
-          <span className="text-emerald-400 font-mono">+{inr(plan.gainIfRight, 0)}</span>
+          <span className="text-emerald-600 dark:text-emerald-400 font-mono">+{inr(plan.gainIfRight, 0)}</span>
           <span className="text-muted-foreground"> if right, </span>
-          <span className="text-rose-400 font-mono">−{inr(plan.lossIfWrong, 0)}</span>
+          <span className="text-rose-600 dark:text-rose-400 font-mono">−{inr(plan.lossIfWrong, 0)}</span>
           <span className="text-muted-foreground"> if wrong</span>
         </p>
       )}
@@ -444,12 +444,12 @@ function IdeaCard({
             {row.side === "SHORT" ? " position" : " needed"}).
           </p>
           <p>
-            <span className="text-emerald-400">If right:</span> exit at{" "}
+            <span className="text-emerald-600 dark:text-emerald-400">If right:</span> exit at{" "}
             <span className="font-mono">{inr(row.target)}</span>, gain about{" "}
             <span className="font-mono">{inr(plan.gainIfRight, 0)}</span>.
           </p>
           <p>
-            <span className="text-rose-400">If wrong:</span> exit at <span className="font-mono">{inr(row.stop)}</span>,
+            <span className="text-rose-600 dark:text-rose-400">If wrong:</span> exit at <span className="font-mono">{inr(row.stop)}</span>,
             lose about <span className="font-mono">{inr(plan.lossIfWrong, 0)}</span>.
           </p>
           {exitPlan !== "fixed" && (
@@ -473,8 +473,8 @@ function IdeaCard({
         <p
           className={cn(
             "text-xs",
-            past.tone === "good" && "text-emerald-300",
-            past.tone === "bad" && "text-rose-300",
+            past.tone === "good" && "text-emerald-700 dark:text-emerald-300",
+            past.tone === "bad" && "text-rose-700 dark:text-rose-300",
             (past.tone === "mixed" || past.tone === "unknown") && "text-muted-foreground",
           )}
         >
@@ -489,7 +489,7 @@ function IdeaCard({
         </p>
       )}
       {row.stale && (
-        <p className="text-xs text-amber-300">
+        <p className="text-xs text-amber-700 dark:text-amber-300">
           Price is from {row.as_of}, so it may be out of date. Check the live price before acting.
         </p>
       )}
@@ -808,7 +808,7 @@ export function Guide({
       </header>
 
       {error && (
-        <div className="rounded-md border border-rose-800/50 bg-rose-950/30 text-rose-200 text-sm px-3 py-2" role="alert">
+        <div className="rounded-md border border-rose-800/50 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-200 text-sm px-3 py-2" role="alert">
           {error}
         </div>
       )}
@@ -955,7 +955,7 @@ export function Guide({
                           <td
                             className={cn(
                               "text-right font-mono pr-4",
-                              (r.long.avg_r ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400",
+                              (r.long.avg_r ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
                               r.long.avg_r === best && "font-semibold",
                             )}
                           >
@@ -964,7 +964,7 @@ export function Guide({
                           <td
                             className={cn(
                               "text-right font-mono pr-4",
-                              (r.short.avg_r ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400",
+                              (r.short.avg_r ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
                             )}
                           >
                             {cell(r.short.avg_r)}

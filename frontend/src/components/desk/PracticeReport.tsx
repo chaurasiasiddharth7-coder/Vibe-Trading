@@ -9,7 +9,7 @@ const H = 96;
 const PAGE = 30;
 const ENOUGH = 30;
 
-const toneClass = (n: number) => cn(tone(n) === "good" && "text-emerald-400", tone(n) === "bad" && "text-rose-400");
+const toneClass = (n: number) => cn(tone(n) === "good" && "text-emerald-600 dark:text-emerald-400", tone(n) === "bad" && "text-rose-600 dark:text-rose-400");
 
 function Split({ title, rows }: { title: string; rows: PracticeSplit[] }) {
   if (!rows.length) return null;

@@ -123,7 +123,7 @@ function Detail({
   return (
     <div className="px-3 pb-4 pt-1 space-y-4 text-sm">
       {t.data_warning && (
-        <p role="note" className="rounded-md border border-amber-700/60 bg-amber-950/30 px-3 py-2 text-amber-200">
+        <p role="note" className="rounded-md border border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-amber-700 dark:text-amber-200">
           {t.symbol} moved {t.data_warning.change_pct > 0 ? "+" : "−"}
           {Math.abs(t.data_warning.change_pct).toFixed(0)}% in one day on {t.data_warning.date}. That is unusually large
           and can be a data error or a split or bonus. Check the price before trusting this result.
@@ -173,13 +173,13 @@ function Detail({
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Take profit at</dt>
-          <dd className="font-mono text-emerald-400">{inr(t.target)}</dd>
+          <dd className="font-mono text-emerald-600 dark:text-emerald-400">{inr(t.target)}</dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">
             {open && t.stop_now != null && t.stop_now !== t.stop ? "Cut loss now (started at)" : "Cut loss at"}
           </dt>
-          <dd className="font-mono text-rose-400">
+          <dd className="font-mono text-rose-600 dark:text-rose-400">
             {open && t.stop_now != null && t.stop_now !== t.stop ? (
               <>
                 {inr(t.stop_now)} <span className="text-muted-foreground text-xs">({inr(t.stop, 0)})</span>
@@ -194,8 +194,8 @@ function Detail({
           <dd
             className={cn(
               "font-mono",
-              (resultOf(t) ?? 0) > 0 && "text-emerald-400",
-              (resultOf(t) ?? 0) < 0 && "text-rose-400",
+              (resultOf(t) ?? 0) > 0 && "text-emerald-600 dark:text-emerald-400",
+              (resultOf(t) ?? 0) < 0 && "text-rose-600 dark:text-rose-400",
             )}
           >
             {money(resultOf(t))}
@@ -237,7 +237,7 @@ function Detail({
           </p>
         )}
         {open && (t.plans?.length ?? 0) > 1 && (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Changed {(t.plans?.length ?? 1) - 1} time{(t.plans?.length ?? 1) - 1 === 1 ? "" : "s"}. A change applies from the
             next trading session after it's made.
           </p>
@@ -263,10 +263,16 @@ function Detail({
 
       {progress != null && (
         <div className="space-y-1">
-          <div className="relative h-2 rounded bg-gradient-to-r from-rose-900/60 via-muted to-emerald-900/60">
+          <div className="relative h-2 rounded bg-muted">
+            {entryAt != null && (
+              <>
+                <span aria-hidden className="absolute inset-y-0 left-0 rounded-s bg-rose-500/25" style={{ width: `${entryAt * 100}%` }} />
+                <span aria-hidden className="absolute inset-y-0 right-0 rounded-e bg-emerald-500/25" style={{ width: `${(1 - entryAt) * 100}%` }} />
+              </>
+            )}
             {entryAt != null && (
               <span
-                className="absolute top-[-3px] h-[14px] w-px bg-muted-foreground"
+                className="absolute -top-1 h-4 w-px bg-muted-foreground"
                 style={{ left: `${entryAt * 100}%` }}
                 title="Where you entered"
               />
@@ -277,7 +283,7 @@ function Detail({
               const at = span > 0 ? Math.min(1, Math.max(0, pos / span)) : 0;
               return (
                 <span
-                  className="absolute top-[-3px] h-[14px] w-0.5 bg-rose-400"
+                  className="absolute -top-1 h-4 w-0.5 bg-rose-400"
                   style={{ left: `${at * 100}%` }}
                   title="Cut-loss now"
                 />
@@ -289,7 +295,7 @@ function Detail({
               title={open ? "Price now" : "Exit price"}
             />
           </div>
-          <div className="flex justify-between text-[11px] text-muted-foreground">
+          <div className="flex justify-between text-xs text-muted-foreground">
             <span>Cut loss {inr(t.stop, 0)}</span>
             <span>
               {open
@@ -340,7 +346,7 @@ function Detail({
           {d?.cautions && d.cautions.filter((c) => c !== "no Kronos forecast").length > 0 && (
             <div>
               <h4 className="text-sm font-semibold">Warnings at the time</h4>
-              <ul className="list-disc pl-4 text-amber-300">
+              <ul className="list-disc pl-4 text-amber-700 dark:text-amber-300">
                 {d.cautions
                   .filter((c) => c !== "no Kronos forecast")
                   .map((c) => (
@@ -451,7 +457,7 @@ function TradeActions({
                 Move cut-loss…
               </button>
               <div className="my-1 border-t border-border" />
-              <p className="px-3 pb-1 text-[11px] text-muted-foreground">Exit style</p>
+              <p className="px-3 pb-1 text-xs text-muted-foreground">Exit style</p>
               {EXIT_PLANS.map((p) => (
                 <button
                   key={p.key}
@@ -491,7 +497,7 @@ function TradeActions({
                   className="mt-1 h-9 w-full rounded-md border border-border bg-background px-2 font-mono text-sm"
                 />
               </label>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 It can only move closer to the price: {long ? "above" : "below"} {inr(stopNow)} and {long ? "below" : "above"}{" "}
                 {inr(price)} now. Applies from the next session.
               </p>
@@ -669,7 +675,7 @@ export function PracticeTrades({
               {showRow("status_line") && (<>
               {t.status === "OPEN" ? "Open" : (EXIT_LABEL[t.exit_reason ?? ""] ?? "Closed")}
               {t.status === "OPEN" && (t.plan !== "fixed" || (t.stop_now != null && t.stop_now !== t.stop)) && (
-                <span className="block text-[11px]">
+                <span className="block text-xs">
                   {isTrailing(t.plan) ? "Trailing" : t.plan === "breakeven" ? "Break-even" : "Moved"} · cut-loss {inr(t.stop_now ?? t.stop, 0)}
                 </span>
               )}
@@ -677,7 +683,7 @@ export function PracticeTrades({
             </span>
             <span className="flex items-center gap-2 justify-end whitespace-nowrap">
               {showRow("result") && (
-                <span className={cn("font-mono text-sm", (r ?? 0) > 0 && "text-emerald-400", (r ?? 0) < 0 && "text-rose-400")}>
+                <span className={cn("font-mono text-sm", (r ?? 0) > 0 && "text-emerald-600 dark:text-emerald-400", (r ?? 0) < 0 && "text-rose-600 dark:text-rose-400")}>
                   {money(r)}
                 </span>
               )}
@@ -703,14 +709,14 @@ export function PracticeTrades({
           const cells = [
             ["price_bought", "Bought at", inr(t.entry), ""],
             ["price_now", t.status === "OPEN" ? "Now" : "Sold at", inr(t.status === "OPEN" ? t.current_price : t.exit_price), ""],
-            ["price_target", "Target", inr(t.target), "text-emerald-400"],
-            ["price_cutloss", "Cut-loss", inr(t.status === "OPEN" ? (t.stop_now ?? t.stop) : t.stop), "text-rose-400"],
+            ["price_target", "Target", inr(t.target), "text-emerald-600 dark:text-emerald-400"],
+            ["price_cutloss", "Cut-loss", inr(t.status === "OPEN" ? (t.stop_now ?? t.stop) : t.stop), "text-rose-600 dark:text-rose-400"],
             ["price_qty", "Qty", String(t.qty), ""],
           ].filter(([id]) => showRow(id));
           if (cells.length === 0) return null;
           return (
             <dl
-              className="grid gap-x-2 px-3 pb-2 text-[11px] leading-tight"
+              className="grid gap-x-2 px-3 pb-2 text-xs leading-tight"
               style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0, 1fr))` }}
               aria-label={`${t.symbol} prices`}
             >
@@ -774,13 +780,13 @@ export function PracticeTrades({
               <dl className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div className="rounded-md bg-muted/50 p-3">
                   <dt className="text-xs text-muted-foreground">Open trades so far</dt>
-                  <dd className={cn("font-mono text-base", sum(openTrades.map(resultOf)) >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                  <dd className={cn("font-mono text-base", sum(openTrades.map(resultOf)) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
                     {money(sum(openTrades.map(resultOf)))}
                   </dd>
                 </div>
                 <div className="rounded-md bg-muted/50 p-3">
                   <dt className="text-xs text-muted-foreground">Finished trades</dt>
-                  <dd className={cn("font-mono text-base", sum(closedTrades.map(resultOf)) >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                  <dd className={cn("font-mono text-base", sum(closedTrades.map(resultOf)) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
                     {closedTrades.length ? money(sum(closedTrades.map(resultOf))) : "—"}
                   </dd>
                 </div>
@@ -878,7 +884,7 @@ export function PracticeTrades({
                             {showRow("day_totals") && (
                               <>
                                 {" · "}
-                                <span className={cn("font-mono", total > 0 && "text-emerald-400", total < 0 && "text-rose-400")}>{money(total)}</span>
+                                <span className={cn("font-mono", total > 0 && "text-emerald-600 dark:text-emerald-400", total < 0 && "text-rose-600 dark:text-rose-400")}>{money(total)}</span>
                               </>
                             )}
                           </span>

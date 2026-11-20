@@ -281,6 +281,8 @@ from src.api.alphadesk_routes import register_alphadesk_routes  # noqa: E402
 register_alphadesk_routes(app)
 from src.api.intraday_routes import register_intraday_routes  # noqa: E402
 register_intraday_routes(app, require_auth)
+from src.api.btst_routes import register_btst_routes  # noqa: E402
+register_btst_routes(app, require_auth)
 
 # --- Auth helpers (SSE tickets) ---
 from src.api.auth_routes import register_auth_routes  # noqa: E402

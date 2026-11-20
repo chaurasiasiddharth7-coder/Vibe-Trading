@@ -208,3 +208,28 @@ The same one-glance report the Intraday page gives, for the fake-money trades th
 **Motion storyboard:** no new motion. The dropdown chevron turns 180° in 150 ms (ease-out, off under reduced motion). Layout switches are instant.
 
 **Motion budget (3D: none, internal tool):** unchanged from the Desk rules above.
+
+## `/btst` — Overnight (BTST) top-gainer picks
+
+Same reference and tokens as `/intraday` (Mercury restraint, host tokens, no new hues). Mode: Operate.
+
+### North star
+
+One decision a day, made at 15:20: which top gainer to buy for tomorrow, at what two exit prices, and how much to trust it. The warnings explain why the other gainers were passed over.
+
+### Layout (≥1024px two columns, below that one column in this order)
+
+1. **Header**: h1 "Overnight (BTST)", Scan now, Settle (only for a past, unsettled day), schedule line (scan 15:20, settle 15:40 IST, on/off, stored prices to …). Thin progress bar while a job runs (`transform: scaleX`, 300ms `ease-out`).
+2. **Trust sentence** (always first): no live trades / "Too early to trust: N of 30" / live average after costs. Replayed results are called a hypothesis until live days agree.
+3. **Left, "Latest scan"**: pick card (symbol, Buy, today's gain; Buy around, Take-profit, Safety stop, Costs or Result; the three broker steps; money-per-trade input saved per browser), scan line (time, liquid stocks, % up, price source, coverage), notes in amber, then the candidate list.
+4. **Candidate rows** are buttons (≥44px, `aria-expanded`): rank, symbol, gain, warning labels with ⚠ glyphs or "✓ No warnings", next-day result once settled. Expanded: each warning's sentence plus its measured 5%+ loss rate with and without it, and the plain numbers behind it.
+5. **Right, "Track record"**: tablist Live days / Replayed from stored prices (never blended). Four stats; with the stop on, the per-trade figure is a range (stop first … take-profit first) because a daily bar cannot order two fills; "Same picks, no stop" beside it. By-year table (with the stop as a range, no stop), and "How the warnings did" on every settled candidate.
+6. **Live days** list (rows are buttons, `aria-pressed`), then "How the rules work" `<details>` closed by default (rules, research result, stop/trailing findings, limits, not-advice line), and the cron lines when the schedule is off.
+
+### States
+
+No scan yet: one sentence on when it runs. Skipped day: "No trade for DATE" + why. Waiting for tomorrow: outcome text "Waiting for tomorrow's prices". No replay: button "Build the replay" (needs the NSE store; says so when missing). Errors via `friendlyError`.
+
+### Motion
+
+Row tint and chevron rotation (150ms `ease-out`), spinner on the running button, progress bar. `motion-reduce` disables all of them. No count-ups, no chart animation.

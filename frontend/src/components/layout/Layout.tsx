@@ -2,7 +2,7 @@ import { DASHBOARD_ONLY } from "@/lib/hosted";
 import { useTranslation } from "react-i18next";
 import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useSearchParams } from "react-router-dom";
-import { Activity, BarChart3, Bot, Check, ChevronDown, FileText, Languages, Moon, Sun, Plus, Trash2, Pencil, MessageSquare, ChevronsLeft, ChevronsRight, Settings, Layers, Loader2, LayoutDashboard } from "lucide-react";
+import { Activity, BarChart3, Bot, Check, ChevronDown, FileText, Languages, Moon, Sun, Plus, Trash2, Pencil, MessageSquare, ChevronsLeft, ChevronsRight, Settings, Layers, Loader2, LayoutDashboard, Sunset } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { api, type SessionItem } from "@/lib/api";
@@ -24,12 +24,13 @@ export function Layout() {
     { to: "/alpha-zoo", icon: Layers, label: t('layout.alphaZoo') },
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/intraday", icon: Activity, label: "Intraday" },
+    { to: "/btst", icon: Sunset, label: "Overnight" },
     { to: "/settings", icon: Settings, label: t('layout.settings') },
     { to: "/correlation", icon: BarChart3, label: t('layout.correlation') },
   ];
   const nav = DASHBOARD_ONLY
     ? [
-        ...NAV.filter((n) => n.to === "/dashboard" || n.to === "/intraday"),
+        ...NAV.filter((n) => n.to === "/dashboard" || n.to === "/intraday" || n.to === "/btst"),
         // The full Settings page needs server routes the hosted site doesn't have; this opens the dashboard's own settings.
         { to: "/dashboard?settings=1", icon: Settings, label: "Settings" },
       ]
@@ -96,12 +97,12 @@ export function Layout() {
     <div className="flex h-screen bg-background rtl:flex-row-reverse">
       {/* Sidebar */}
       <aside className={cn(
-        "border-e bg-card flex flex-col shrink-0 transition-all duration-200 overflow-visible",
+        "border-e bg-card flex flex-col shrink-0 transition-[width] duration-200 motion-reduce:transition-none overflow-visible",
         collapsed ? "w-12" : "w-64"
       )}>
         {/* Brand */}
         <div className={cn("border-b", collapsed ? "p-2 flex justify-center" : "p-4")}>
-          <Link to="/" className={cn("flex items-center font-bold text-base tracking-tight", collapsed ? "justify-center" : "gap-2")}>
+          <Link to="/" className={cn("flex items-center font-semibold text-base", collapsed ? "justify-center" : "gap-2")}>
             <BarChart3 className="h-5 w-5 text-primary shrink-0" />
             {!collapsed && "Vibe-Trading"}
           </Link>
@@ -203,8 +204,8 @@ export function Layout() {
                     )}
                     {!isRenaming && isDeleting ? (
                       <div className="absolute right-0.5 flex items-center gap-0.5">
-                        <button onClick={() => deleteSession(s.session_id)} className="p-1 text-danger hover:bg-danger/10 rounded text-[10px] font-medium">{t('layout.confirm')}</button>
-                        <button onClick={() => setDeleteTarget(null)} className="p-1 text-muted-foreground hover:bg-muted rounded text-[10px]">{t('layout.cancel')}</button>
+                        <button onClick={() => deleteSession(s.session_id)} className="p-1 text-danger hover:bg-danger/10 rounded text-xs font-medium">{t('layout.confirm')}</button>
+                        <button onClick={() => setDeleteTarget(null)} className="p-1 text-muted-foreground hover:bg-muted rounded text-xs">{t('layout.cancel')}</button>
                       </div>
                     ) : !isRenaming ? (
                       <div className="absolute right-1 opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity">
@@ -267,7 +268,7 @@ export function Layout() {
               </div>
               <div className="flex flex-col gap-1">
                 <LanguageSwitcher />
-                <p className="text-[10px] text-muted-foreground/60">{t('app.version')}</p>
+                <p className="text-xs text-muted-foreground/60">{t('app.version')}</p>
               </div>
             </>
           )}

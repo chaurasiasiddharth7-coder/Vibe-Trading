@@ -14,16 +14,16 @@ import {
 } from "@/components/desk/analysisView";
 
 const BADGE: Record<Direction, { text: string; cls: string }> = {
-  bull: { text: "▲ Bullish", cls: "text-emerald-400 border-emerald-700/60" },
-  bear: { text: "▼ Bearish", cls: "text-rose-400 border-rose-700/60" },
+  bull: { text: "▲ Bullish", cls: "text-emerald-600 dark:text-emerald-400 border-emerald-700/60" },
+  bear: { text: "▼ Bearish", cls: "text-rose-600 dark:text-rose-400 border-rose-700/60" },
   neutral: { text: "● Neutral", cls: "text-muted-foreground border-border" },
 };
 
 function Badge({ d, caution }: { d: Direction; caution?: boolean }) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      <span className={cn("rounded border px-1.5 py-0.5 text-[11px]", BADGE[d].cls)}>{BADGE[d].text}</span>
-      {caution && <span className="rounded border border-amber-700/60 px-1.5 py-0.5 text-[11px] text-amber-300">⚠ Stretched</span>}
+      <span className={cn("rounded border px-1.5 py-0.5 text-xs", BADGE[d].cls)}>{BADGE[d].text}</span>
+      {caution && <span className="rounded border border-amber-700/60 px-1.5 py-0.5 text-xs text-amber-700 dark:text-amber-300">⚠ Stretched</span>}
     </span>
   );
 }
@@ -42,7 +42,7 @@ export interface ForecastControl {
 function LevelLine({ kind, l }: { kind: "Resistance" | "Support"; l: Level }) {
   return (
     <li className="flex flex-wrap items-baseline gap-x-2 text-sm">
-      <span className={cn("text-xs w-20", kind === "Resistance" ? "text-rose-300" : "text-emerald-300")}>{kind}</span>
+      <span className={cn("text-xs w-20", kind === "Resistance" ? "text-rose-700 dark:text-rose-300" : "text-emerald-700 dark:text-emerald-300")}>{kind}</span>
       <span className="font-mono">₹{l.price.toLocaleString("en-IN")}</span>
       <span className="font-mono text-xs text-muted-foreground">
         {l.distPct >= 0 ? "+" : "−"}
@@ -99,7 +99,7 @@ export function AnalysisPanel({
     <section aria-label="Analysis" className="space-y-3 rounded-md border border-border p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="text-sm font-semibold">What the analysis says</h4>
-        {asOf && <span className="text-[11px] text-muted-foreground">Daily candles as of {asOf}</span>}
+        {asOf && <span className="text-xs text-muted-foreground">Daily candles as of {asOf}</span>}
       </div>
 
       {now && (
@@ -137,7 +137,7 @@ export function AnalysisPanel({
           </span>
         </p>
         {againstTrade && (
-          <p role="note" className="text-xs text-amber-300">
+          <p role="note" className="text-xs text-amber-700 dark:text-amber-300">
             The signals now lean against this {side === "LONG" ? "buy" : "short"}. Check the suggested exit below.
           </p>
         )}
@@ -172,7 +172,7 @@ export function AnalysisPanel({
             Resistance is a price where rises have stalled before. Support is where falls have stopped. Dashed lines on the chart.
           </p>
           {srWarnings.map((w) => (
-            <p key={w} role="note" className="text-xs text-amber-300">
+            <p key={w} role="note" className="text-xs text-amber-700 dark:text-amber-300">
               {w}
             </p>
           ))}
@@ -198,7 +198,7 @@ export function AnalysisPanel({
             </p>
           )}
           {forecast.state === "error" && (
-            <p role="alert" className="text-xs text-rose-300">
+            <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">
               {forecast.error ?? "The forecast isn't available right now."}
             </p>
           )}
@@ -270,7 +270,7 @@ export function AnalysisPanel({
           )}
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         These are rule-based readings of past prices. They describe what happened, they don't predict what will.
       </p>
     </section>

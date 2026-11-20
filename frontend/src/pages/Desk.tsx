@@ -508,7 +508,7 @@ export function Desk({ embedded = false }: { embedded?: boolean } = {}) {
       </header>
 
       {error && (
-        <div className="rounded-md border border-rose-800/50 bg-rose-950/30 text-rose-200 text-sm px-3 py-2">
+        <div className="rounded-md border border-rose-800/50 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-200 text-sm px-3 py-2">
           {error}
         </div>
       )}
@@ -538,12 +538,12 @@ export function Desk({ embedded = false }: { embedded?: boolean } = {}) {
           {analysis && !loading && (
             <>
               <div className="flex items-baseline gap-3">
-                <h2 className="text-xl font-bold">{analysis.symbol}</h2>
+                <h2 className="text-xl font-semibold">{analysis.symbol}</h2>
                 <span className="text-xl font-mono">₹{analysis.current_price}</span>
                 <span
                   className={cn(
                     "text-sm font-mono",
-                    analysis.change_percent >= 0 ? "text-emerald-400" : "text-rose-400",
+                    analysis.change_percent >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
                   )}
                 >
                   {analysis.change_percent >= 0 ? "+" : ""}
@@ -597,7 +597,7 @@ export function Desk({ embedded = false }: { embedded?: boolean } = {}) {
               </div>
             )}
             {arenaVotes && (
-              <div className="text-[11px] font-mono space-y-1 border border-border rounded p-2">
+              <div className="text-xs font-mono space-y-1 border border-border rounded p-2">
                 {arenaVotes.map((v) => (
                   <div key={String(v.engine_id)} className="flex justify-between gap-2">
                     <span>
@@ -643,7 +643,7 @@ export function Desk({ embedded = false }: { embedded?: boolean } = {}) {
                 Paper Sell
               </button>
             </div>
-            {paperMsg && <p className="text-[11px] text-muted-foreground font-mono">{paperMsg}</p>}
+            {paperMsg && <p className="text-xs text-muted-foreground font-mono">{paperMsg}</p>}
           </div>
 
           {scorecard && (
@@ -651,7 +651,7 @@ export function Desk({ embedded = false }: { embedded?: boolean } = {}) {
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <ShieldAlert className="h-4 w-4" /> Engine scorecard
               </h3>
-              <div className="text-[11px] font-mono space-y-1">
+              <div className="text-xs font-mono space-y-1">
                 {scorecard.map((e) => (
                   <div key={String(e.engine_id)} className="flex justify-between gap-2">
                     <span>
@@ -670,8 +670,8 @@ export function Desk({ embedded = false }: { embedded?: boolean } = {}) {
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <ShieldAlert className="h-4 w-4 text-amber-500" />
           Manual tiny live
-          <span className="text-[10px] font-mono uppercase tracking-wider border border-amber-700/40 text-amber-400 px-2 py-0.5 rounded">
-            no API place
+          <span className="text-xs font-mono border border-amber-700/40 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded">
+            No API place
           </span>
         </h3>
         <p className="text-xs text-muted-foreground">
@@ -727,14 +727,14 @@ export function Desk({ embedded = false }: { embedded?: boolean } = {}) {
             Issue manual ticket
           </button>
         </div>
-        {liveMsg && <p className="text-[11px] font-mono text-muted-foreground">{liveMsg}</p>}
+        {liveMsg && <p className="text-xs font-mono text-muted-foreground">{liveMsg}</p>}
         {ticketCopy && (
-          <pre className="text-[10px] font-mono whitespace-pre-wrap rounded border border-border bg-background p-3 max-h-40 overflow-auto">
+          <pre className="text-xs font-mono whitespace-pre-wrap rounded border border-border bg-background p-3 max-h-40 overflow-auto">
             {ticketCopy}
           </pre>
         )}
         {liveStatus && Array.isArray(liveStatus.engines) && (
-          <div className="text-[11px] font-mono space-y-1">
+          <div className="text-xs font-mono space-y-1">
             <p>
               mandate={String(liveStatus.mandate_ok)} · halted={String(liveStatus.halted)} · mode=
               {String(liveStatus.mode)}
@@ -756,7 +756,7 @@ export function Desk({ embedded = false }: { embedded?: boolean } = {}) {
           </div>
         )}
         {liveTickets.length > 0 && (
-          <ul className="text-[11px] font-mono space-y-1 max-h-32 overflow-auto">
+          <ul className="text-xs font-mono space-y-1 max-h-32 overflow-auto">
             {liveTickets.slice(0, 5).map((t) => (
               <li key={String(t.id)} className="flex flex-wrap items-center gap-2 justify-between">
                 <span>
@@ -767,7 +767,7 @@ export function Desk({ embedded = false }: { embedded?: boolean } = {}) {
                     type="button"
                     disabled={liveBusy}
                     onClick={() => void handleMarkFilled(String(t.id))}
-                    className="h-6 px-2 rounded border border-border text-[10px] hover:bg-muted"
+                    className="h-6 px-2 rounded border border-border text-xs hover:bg-muted"
                   >
                     Mark filled
                   </button>
