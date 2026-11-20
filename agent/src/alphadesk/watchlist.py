@@ -18,7 +18,6 @@ from typing import Any
 
 MAX_LISTS = 5
 MAX_ITEMS = 250
-INDICES = ["NIFTY 50", "NIFTY BANK"]
 _SYM = re.compile(r"^[A-Z0-9&\-]{1,20}$")
 _LOCK = threading.Lock()
 _EOD: dict[str, Any] = {"at": 0.0, "mtime": 0.0, "stocks": {}, "indices": {}}
@@ -166,7 +165,9 @@ def quotes(symbols: list[str], *, with_indices: bool = True) -> dict[str, Any]:
             syms.append(clean_symbol(s))
         except ValueError:
             continue
-    names = syms + (INDICES if with_indices else [])
+    from src.alphadesk import market_brief
+
+    names = syms
     live = live_quotes.active()
     out: dict[str, Any] = {"live": False, "source": "nse_eod", "at": time.time(), "indices": [], "quotes": {}}
     if live and names:
@@ -178,24 +179,20 @@ def quotes(symbols: list[str], *, with_indices: bool = True) -> dict[str, Any]:
                 continue
             got += 1
             prev = (q.get("ohlc") or {}).get("close")
-            row = _row(n, q.get("last_price"), prev, volume=q.get("volume"), open=(q.get("ohlc") or {}).get("open"),
-                       high=(q.get("ohlc") or {}).get("high"), low=(q.get("ohlc") or {}).get("low"))
-            if n in INDICES:
-                out["indices"].append({**row, "exchange": "INDEX"})
-            else:
-                out["quotes"][n] = row
+            out["quotes"][n] = _row(n, q.get("last_price"), prev, volume=q.get("volume"), open=(q.get("ohlc") or {}).get("open"),
+                                    high=(q.get("ohlc") or {}).get("high"), low=(q.get("ohlc") or {}).get("low"))
         if got:
             out.update(live=True, source="kite")
-            return out
-    stocks, idx = _eod_tables()
+    if with_indices:
+        out["indices"] = market_brief.index_rows(live)
+        if any(r.get("source") == "kite" for r in out["indices"]):
+            out.update(live=True, source="kite")
+    if out["live"] and (out["quotes"] or not syms):
+        return out
+    stocks, _idx = _eod_tables()
     for n in syms:
         e = stocks.get(n)
         out["quotes"][n] = _row(n, e["ltp"], e["prev"], as_of=e["as_of"]) if e else _row(n, None, None)
-    if with_indices:
-        for n in INDICES:
-            e = idx.get(n)
-            if e:
-                out["indices"].append({**_row(n, e["ltp"], e["prev"], as_of=e["as_of"]), "exchange": "INDEX"})
     return out
 
 

@@ -90,7 +90,10 @@ def test_watchlist_crud(tmp_path, monkeypatch):
 
 
 def test_quotes_eod_for_others(monkeypatch):
+    from src.alphadesk import market_brief
+
     monkeypatch.setattr(LQ, "active", lambda: False)
+    monkeypatch.setattr(market_brief, "_yahoo_index", lambda name: None)
     monkeypatch.setattr(W, "_eod_tables", lambda: (
         {"LT": {"ltp": 4209.1, "prev": 4211.0, "as_of": "2026-11-19"}},
         {"NIFTY 50": {"ltp": 25800.6, "prev": 25514.3, "as_of": "2026-11-19"}}))
@@ -106,7 +109,7 @@ def test_quotes_live_for_owner(monkeypatch):
     out = W.quotes(["RBA"])
     assert out["live"] is True and out["source"] == "kite"
     assert out["quotes"]["RBA"]["ltp"] == 105.0 and out["quotes"]["RBA"]["change"] == 7.0
-    assert {i["symbol"] for i in out["indices"]} == {"NIFTY 50", "NIFTY BANK"}
+    assert {i["symbol"] for i in out["indices"]} == {"NIFTY 50", "NIFTY BANK", "INDIA VIX"}
 
 
 def test_token_import(tmp_path):

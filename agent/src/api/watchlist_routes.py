@@ -6,6 +6,7 @@
     PATCH  /api/desk/watchlists/{i}                   {name?, items?}  rename or reorder
     GET    /api/desk/quotes?symbols=A,B&indices=1     live from Kite on the owner's desk, else end of day
     GET    /api/desk/symbols?q=REL                    symbol search
+    GET    /api/desk/brief                            today's brief: indices, insight, top picks, news
 """
 
 from __future__ import annotations
@@ -53,6 +54,13 @@ def register_watchlist_routes(app: FastAPI, require_auth: AuthDep) -> None:
     def quotes(symbols: str = Query(""), indices: int = Query(1)) -> dict[str, Any]:
         syms = [s for s in symbols.split(",") if s.strip()]
         return W.quotes(syms, with_indices=bool(indices))
+
+    @app.get("/api/desk/brief", dependencies=[Depends(require_auth)])
+    def brief() -> dict[str, Any]:
+        from src.alphadesk import market_brief
+
+        watch = sorted({s for lst in W.load() for s in lst["items"]})
+        return market_brief.brief(watch)
 
     @app.get("/api/desk/symbols", dependencies=[Depends(require_auth)])
     def symbols(q: str = Query("", max_length=20)) -> dict[str, Any]:
