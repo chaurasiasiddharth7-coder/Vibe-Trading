@@ -131,9 +131,17 @@ def register_strategies_routes(app: FastAPI, require_auth: AuthDep) -> None:
     @app.post("/api/desk/strategies/{sid}/test", dependencies=[Depends(require_auth)])
     def test(sid: str, body: dict[str, Any], profile: str | None = Query(None)) -> dict[str, Any]:
         with scoped(profile):
+            from src.alphadesk import strategies_builtin as SB
+
+            if sid in SB.TESTABLE:  # built-ins replay their own engines
+                try:
+                    jid = SB.start(sid, int(body.get("years") or 3), str(body.get("universe") or "nifty100"))
+                except (S.StrategyError, TypeError, ValueError) as exc:
+                    raise bad(exc) from exc
+                return {"ok": True, "job_id": jid}
             rec = (S.detail(sid) or {}).get("strategy")
             if rec is None:
-                raise HTTPException(status_code=404, detail="Only lab strategies can be re-tested here.")
+                raise HTTPException(status_code=404, detail="This strategy can't be tested on past prices.")
             try:
                 jid = S.start_test(sid, rec["rules"], int(body.get("years") or 3),
                                    float(body.get("cost_pct") if body.get("cost_pct") is not None else S.DEFAULT_COST_PCT))

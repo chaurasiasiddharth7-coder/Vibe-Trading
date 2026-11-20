@@ -117,4 +117,38 @@ describe("Strategies page", () => {
     const body = create.mock.calls[0][0];
     expect(body.rules.entry).toEqual([{ kind: "rsi_below", n: 2, level: 10 }]);
   });
+
+  it("a built-in runs its past-price test and shows the scorecard", async () => {
+    const api = await import("@/lib/strategiesApi");
+    vi.spyOn(api.strategiesApi, "list").mockResolvedValue({ ok: true, data: { ...catalogue, strategies: [row({ testable: true, last_test: null })] } });
+    vi.spyOn(api.strategiesApi, "detail").mockResolvedValue({ ok: true, data: { strategy: null, tests: [], paper_trades: [] } });
+    const test = vi.spyOn(api.strategiesApi, "test").mockResolvedValue({ ok: true, job_id: "j1" });
+    vi.spyOn(api.strategiesApi, "job").mockResolvedValue({
+      ok: true,
+      data: {
+        id: "j1",
+        status: "done",
+        error: null,
+        result: {
+          summary: { trades: 412, win_rate: 54.1, avg_pct: 0.21, max_drawdown_pct: -9.4 },
+          gate: { passed: true, checks: [{ label: "Beats an average stock from the same day's shortlist", ok: true }] },
+          years: 3,
+          days: 735,
+          skipped_days: 323,
+          cost_pct: 0.25,
+          note: "Each past day rebuilt from the NSE closing prices",
+        },
+      },
+    });
+    const { Strategies } = await import("@/pages/Strategies");
+    render(<Strategies />);
+    expect(await screen.findByText("Not tested yet")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Overnight (BTST) pick" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: /Run test/ }));
+    expect(test).toHaveBeenCalledWith("btst", 3, null, undefined);
+    expect(await within(dialog).findByText(/735 days replayed \(323 with no pick\)/)).toBeInTheDocument();
+    expect(within(dialog).getByText("412")).toBeInTheDocument();
+    expect(within(dialog).getByText(/Backtest gate: passed/)).toBeInTheDocument();
+  });
 });

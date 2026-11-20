@@ -49,6 +49,11 @@ export interface TestResult {
   cost_pct?: number;
   symbols_tested?: number;
   symbols_with_trades?: number;
+  /** How a built-in was replayed (what stands in for what). */
+  note?: string;
+  universe?: string;
+  days?: number;
+  skipped_days?: number;
 }
 
 export interface StrategyRow {
@@ -69,6 +74,8 @@ export interface StrategyRow {
   paper_stats?: TrackStats | null;
   last_test?: Pick<TestResult, "summary" | "gate" | "ran_at" | "years"> | null;
   tests_run?: number;
+  /** Built-ins with a past-price replay (signal board, BTST). */
+  testable?: boolean;
   gate: GateCheck[];
   last_scan?: { at: string; opened: number } | null;
   status?: string;
@@ -95,6 +102,8 @@ export interface Job {
   status: "running" | "done" | "failed";
   result: (TestResult & { years?: number }) | null;
   error: string | null;
+  done?: number;
+  total?: number;
 }
 
 type Ok<T> = { ok: boolean; data: T };
@@ -116,10 +125,10 @@ export const strategiesApi = {
       method: "PUT",
       ...json({ on }),
     }),
-  test: (id: string, years: number, profile?: string | null) =>
+  test: (id: string, years: number, profile?: string | null, universe?: string) =>
     request<{ ok: boolean; job_id: string }>(`/api/desk/strategies/${encodeURIComponent(id)}/test${q(profile)}`, {
       method: "POST",
-      ...json({ years }),
+      ...json(universe ? { years, universe } : { years }),
     }),
   tryRules: (rules: Rules, years: number) =>
     request<{ ok: boolean; job_id: string }>("/api/desk/strategies/test", { method: "POST", ...json({ rules, years }) }),
@@ -133,15 +142,19 @@ export const strategiesApi = {
     request<Ok<Draft>>("/api/desk/strategies/import", { method: "POST", ...json(body) }),
 };
 
-/** Poll a backtest job until it ends (every 2s, up to 10 minutes). */
-export async function waitForJob(jobId: string, onTick?: (seconds: number) => void, signal?: { stop: boolean }): Promise<Job> {
+/** Poll a backtest job until it ends (every 2s, up to 30 minutes: a first overnight replay rebuilds every day). */
+export async function waitForJob(
+  jobId: string,
+  onTick?: (seconds: number, progress?: { done: number; total: number }) => void,
+  signal?: { stop: boolean },
+): Promise<Job> {
   const started = Date.now();
   for (;;) {
     if (signal?.stop) throw new Error("stopped");
     const r = await strategiesApi.job(jobId);
     if (r.data.status !== "running") return r.data;
-    if (Date.now() - started > 600_000) throw new Error("The test is taking too long. Try fewer years or symbols.");
-    onTick?.(Math.round((Date.now() - started) / 1000));
+    if (Date.now() - started > 1_800_000) throw new Error("The test is taking too long. Try fewer years or symbols.");
+    onTick?.(Math.round((Date.now() - started) / 1000), r.data.total ? { done: r.data.done ?? 0, total: r.data.total } : undefined);
     await new Promise((res) => setTimeout(res, 2000));
   }
 }

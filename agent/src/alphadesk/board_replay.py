@@ -91,7 +91,8 @@ def replay_symbol(symbol: str, df: pd.DataFrame, plan: str = DEFAULT_PLAN) -> li
         if exit_ is None:  # still open at the end of history
             break
         trades.append(
-            {"symbol": symbol, "side": row["side"], "entry_date": bars[i]["time"], **exit_}
+            {"symbol": symbol, "side": row["side"], "entry_date": bars[i]["time"], "entry": row["entry"],
+             "stop": row["stop"], "target": row["target"], **exit_}
         )
         i += exit_["bars_held"] + 1
     return trades
