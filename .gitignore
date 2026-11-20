@@ -103,3 +103,7 @@ frontend/frontend.log
 # local run outputs (Kite check, guard test script)
 kite_check_result.txt
 profit_guard_test_result.txt
+
+# local deploy/PR helpers
+scripts/.deploy_host
+scripts/pr/
