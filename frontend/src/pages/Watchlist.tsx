@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useStockSheet } from "@/components/desk/StockSheet";
 import { Check, Pencil, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuotes } from "@/hooks/useQuotes";
@@ -8,6 +9,7 @@ import { fmtChange, fmtPrice, tone, watchlistApi, type WatchList } from "@/lib/w
 /** The home screen: five watchlists with prices (live from Kite on the owner's desk). */
 export function Watchlist() {
   const navigate = useNavigate();
+  const sheet = useStockSheet();
   const [lists, setLists] = useState<WatchList[] | null>(null);
   const [max, setMax] = useState(250);
   const [active, setActive] = useState(() => {
@@ -98,7 +100,7 @@ export function Watchlist() {
                 <div className="flex items-center">
                   <button
                     type="button"
-                    onClick={() => navigate(`/dashboard?tab=chart&symbol=${encodeURIComponent(sym)}`)}
+                    onClick={() => (sheet ? sheet.open(sym) : navigate(`/dashboard?tab=chart&symbol=${encodeURIComponent(sym)}`))}
                     className="flex-1 min-w-0 flex items-center justify-between gap-3 px-4 py-3.5 text-start hover:bg-muted/50"
                   >
                     <span className="min-w-0">

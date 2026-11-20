@@ -337,9 +337,12 @@ def main() -> None:
         pull_lists(root, client)
     build_bars(root)
     if not a.build_only:
-        days = (sorted({d.date() for d in pd.to_datetime(
+        sessions = sorted({d.date() for d in pd.to_datetime(
             pd.read_parquet(root / "bars.parquet", columns=["date"])["date"].unique())})
-                if a.indices_all else demerger_days(root))
+        # Every recent session too, so the desk's NIFTY 50 / NIFTY BANK strip shows the latest close
+        # (files already on disk are skipped, so this costs one download per new day).
+        recent = [d for d in sessions if d >= date.today() - timedelta(days=60)]
+        days = sessions if a.indices_all else sorted(set(demerger_days(root)) | set(recent))
         pull_files(root, client, "indices", days, index_archive)
     build_indices(root)
     print("factors:", nse_store.build_all(root))

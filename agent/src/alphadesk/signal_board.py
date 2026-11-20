@@ -177,16 +177,23 @@ def _live() -> bool:
         return False
 
 
+def analysis_cache(params: dict[str, Any]) -> tuple[dict[str, Any], float]:
+    """Cache key params and max age for an analysis: live Kite numbers get their own entry, kept 60 s.
+
+    The separate entry matters: a cached owner analysis carries Kite's live bar, which must never be served to
+    another profile, and the plain entry would otherwise keep the owner on 30-minute-old prices."""
+    from src.alphadesk.cache import PRICE_MAX_AGE_S
+
+    if _live():
+        return {**params, "src": "kite"}, LIVE_MAX_AGE_S
+    return dict(params), PRICE_MAX_AGE_S
+
+
 def _load_analysis(symbol: str) -> dict[str, Any]:
     from src.alphadesk.analysis import analyze_symbol
-    from src.alphadesk.cache import PRICE_MAX_AGE_S, get_cached, set_cached
+    from src.alphadesk.cache import get_cached, set_cached
 
-    params: dict[str, Any] = {"interval": "1d", "period": "6mo"}
-    max_age = PRICE_MAX_AGE_S
-    if _live():
-        # Kite numbers: a separate cache entry (never served to other profiles) kept for a minute.
-        params["src"] = "kite"
-        max_age = LIVE_MAX_AGE_S
+    params, max_age = analysis_cache({"interval": "1d", "period": "6mo"})
     analysis = get_cached("analysis", symbol, max_age_s=max_age, **params)
     if analysis is None:
         analysis = analyze_symbol(symbol, period="6mo", interval="1d")
@@ -198,11 +205,11 @@ def _load_kronos(symbol: str) -> dict[str, Any] | None:
     from src.alphadesk.cache import get_cached, set_cached
     from src.alphadesk.kronos_service import forecast_symbol
 
-    kparams = {"lookback": 400, "pred_len": 15, "interval": "1d", "period": "2y"}
+    kparams, _ = analysis_cache({"lookback": 400, "pred_len": 15, "interval": "1d", "period": "2y"})
     kronos = get_cached("kronos", symbol, **kparams)
     if kronos is None:
         try:
-            kronos = forecast_symbol(symbol, **kparams)
+            kronos = forecast_symbol(symbol, lookback=400, pred_len=15, interval="1d", period="2y")
             set_cached("kronos", symbol, kronos, **kparams)
         except Exception as exc:  # Kronos is optional evidence
             logger.info("kronos skip %s: %s", symbol, exc)

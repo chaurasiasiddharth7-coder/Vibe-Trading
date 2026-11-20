@@ -118,3 +118,35 @@ def test_token_import(tmp_path):
     saved = json.loads(p.read_text())
     assert "secret" not in saved and saved["api_key"] == "k"
     assert kite_auth.import_token(json.dumps({**rec, "expires_at_ms": 2}), path=p, now_ms=5) == 1
+
+
+def test_live_analysis_gets_its_own_cache_entry(monkeypatch):
+    """Owner's Kite-overlaid analysis must never land in the shared cache entry other profiles read."""
+    from src.alphadesk import signal_board as SB
+
+    monkeypatch.setattr(SB, "_live", lambda: True)
+    params, age = SB.analysis_cache({"interval": "1d", "period": "6mo"})
+    assert params["src"] == "kite" and age == SB.LIVE_MAX_AGE_S
+    monkeypatch.setattr(SB, "_live", lambda: False)
+    params, age = SB.analysis_cache({"interval": "1d", "period": "6mo"})
+    assert "src" not in params and age > SB.LIVE_MAX_AGE_S
+
+
+def test_analysis_route_separates_live_cache(monkeypatch, tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from src.alphadesk import cache, signal_board as SB
+    import src.api.alphadesk_routes as R
+
+    monkeypatch.setattr(cache, "_cache_dir", lambda: tmp_path)
+    calls = []
+    monkeypatch.setattr(R, "analyze_symbol", lambda s, **k: calls.append(s) or {"symbol": s, "live": SB._live()})
+    app = FastAPI()
+    R.register_alphadesk_routes(app, lambda: None) if hasattr(R, "register_alphadesk_routes") else pytest.skip("no register fn")
+    c = TestClient(app)
+    monkeypatch.setattr(SB, "_live", lambda: True)
+    assert c.get("/api/analysis/LT").json()["data"]["live"] is True
+    monkeypatch.setattr(SB, "_live", lambda: False)  # another profile, or no Kite login
+    body = c.get("/api/analysis/LT").json()
+    assert body["data"]["live"] is False and body["cached"] is False
