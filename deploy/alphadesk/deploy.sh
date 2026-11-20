@@ -28,6 +28,9 @@ RS=(rsync -az --exclude '__pycache__' --exclude '*.pyc' --exclude '.env'
 if [ "$DRY" = 1 ]; then RS+=(--dry-run --itemize-changes); fi
 "${RS[@]}" agent/ "$DEPLOY_HOST:$DEPLOY_DIR/agent/"
 "${RS[@]}" deploy/alphadesk/ "$DEPLOY_HOST:$DEPLOY_DIR/deploy/alphadesk/"
+# The image also ships the NSE price-store updater (Dockerfile: COPY scripts/nse_pull.py).
+ssh "$DEPLOY_HOST" "mkdir -p $DEPLOY_DIR/scripts" 2>/dev/null || [ "$DRY" = 1 ]
+"${RS[@]}" scripts/nse_pull.py "$DEPLOY_HOST:$DEPLOY_DIR/scripts/nse_pull.py"
 [ "$DRY" = 1 ] && { echo "dry run only: nothing built or restarted."; exit 0; }
 
 ssh "$DEPLOY_HOST" "cd $DEPLOY_DIR/deploy/alphadesk && docker compose up -d --build"
