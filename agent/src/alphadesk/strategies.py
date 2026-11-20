@@ -547,7 +547,7 @@ def update_custom(sid: str, body: dict[str, Any]) -> dict[str, Any]:
 def record_test(sid: str, result: dict[str, Any], years: int) -> None:
     keep = {k: result.get(k) for k in ("summary", "robustness", "gate", "equity", "by_symbol", "cost_pct",
                                        "symbols_tested", "symbols_with_trades", "note", "universe", "days",
-                                       "skipped_days")}
+                                       "skipped_days", "sessions")}
     keep.update({"ran_at": _now(), "years": years, "trades_sample": (result.get("trades") or [])[-50:]})
     with _LOCK:
         data = _load()
@@ -786,8 +786,55 @@ def _guard_strategies() -> list[dict[str, Any]]:
         return []
     out = []
     for name, over in (raw.get("strategies") or {}).items():
-        out.append({"id": f"guard_{name}", "name": f"Profit Guard exits: {name}", "kind": "exit settings",
-                    "source": "profit_guard.yaml", "rules_text": [f"{k}: {v}" for k, v in (over or {}).items()][:8]})
+        lines = guard_text(over or {}) or ["Uses the standard exit rules unchanged"]
+        out.append({"id": f"guard_{name}", "name": f"Profit Guard exits: {GUARD_NAMES.get(name, name)}", "kind": "exit settings",
+                    "source": "profit_guard.yaml",
+                    "rules_text": lines[:8] + ["Everything else follows the standard exit rules (stop 1.5x ATR, breakeven at +1R, trailing stop)"]})
+    return out
+
+
+GUARD_NAMES = {"btst": "Overnight (BTST) pick", "signal_board": "Signal board", "lab": "Lab strategies",
+               "intraday": "Intraday opening-range breakout"}
+
+
+def _r(v: Any) -> str:
+    return f"{float(v):g}"
+
+
+def guard_text(over: dict[str, Any]) -> list[str]:
+    """Profit Guard overrides in plain words (they're YAML keys like ``target_r: null`` underneath)."""
+    flat: dict[str, Any] = {}
+    for k, v in over.items():
+        if isinstance(v, dict):
+            flat.update(v)
+        else:
+            flat[k] = v
+    out: list[str] = []
+    for k, v in flat.items():
+        if k == "target_r":
+            out.append("No fixed take-profit: winners run until the trailing stop" if v in (None, 0) else f"Take profit at +{_r(v)}R")
+        elif k == "scale_out_frac":
+            out.append("No partial booking" if not v else f"Book {_r(float(v) * 100)}% of the position at +{_r(flat.get('scale_out_at_r', 1))}R")
+        elif k == "scale_out_at_r" and "scale_out_frac" in flat:
+            continue
+        elif k == "time_stop_bars":
+            out.append("No time stop" if not v else f"Exit after {v} bars if still below +{_r(flat.get('time_stop_min_r', 0.5))}R")
+        elif k == "time_stop_min_r" and "time_stop_bars" in flat:
+            continue
+        elif k == "stop_atr_k":
+            out.append(f"First stop {_r(v)}x ATR from entry")
+        elif k == "breakeven_at_r":
+            out.append("Stop never moved to breakeven" if v in (None, 0) else f"Stop moves to entry at +{_r(v)}R")
+        elif k == "trail":
+            out.append({"none": "No trailing stop", "percent": "Trailing stop by percent", "chandelier": "Trailing stop below the highest price (chandelier)"}.get(str(v), f"Trailing stop: {v}"))
+        elif k == "chandelier_atr_k":
+            out.append(f"Trailing stop {_r(v)}x ATR below the highest price")
+        elif k == "trail_pct":
+            out.append(f"Trailing stop {_r(v)}% below the best price")
+        elif k == "min_stop_atr":
+            out.append(f"Stop never tighter than {_r(v)}x ATR")
+        else:
+            out.append(f"{k.replace('_', ' ')}: {v}")
     return out
 
 
@@ -862,7 +909,7 @@ def _entries_for_profile(pid: str | None, owner_name: str) -> list[dict[str, Any
     for e in entries:
         if e["kind"] == "built-in":  # past tests of the built-ins (strategies_builtin)
             tests = data["tests"].get(e["id"]) or []
-            e["testable"] = e["id"] in ("signal_board", "btst")
+            e["testable"] = e["id"] in ("signal_board", "btst", "intraday")
             e["last_test"] = {k: tests[-1].get(k) for k in ("summary", "gate", "ran_at", "years")} if tests else None
             e["tests_run"] = len(tests)
         e["gate"] = live_gate(e)

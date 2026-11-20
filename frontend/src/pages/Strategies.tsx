@@ -355,7 +355,7 @@ function ResultView({ r }: { r: TestResult }) {
         ))}
       </dl>
       <p className="text-xs text-muted-foreground">
-        {r.years ? `${r.years} year${r.years > 1 ? "s" : ""} of daily prices` : "Daily prices"}
+        {r.years ? `${r.years} year${r.years > 1 ? "s" : ""} of daily prices` : r.sessions ? `Last ${r.sessions} trading days of 5-minute prices` : "Daily prices"}
         {r.days != null ? ` · ${r.days} days replayed (${r.skipped_days ?? 0} with no pick)` : ` · ${r.symbols_tested ?? "?"} stocks (${r.symbols_with_trades ?? 0} traded)`}
         {r.universe ? ` · ${UNIVERSE_OPTIONS.find((u) => u.id === r.universe)?.label ?? r.universe}` : ""} · costs {r.cost_pct ?? 0.25}% a trade ·{" "}
         {r.note ?? "entry at the next open; if a day touched both the stop and the target, the stop is assumed first."}
@@ -411,7 +411,7 @@ function useTestRunner() {
   const [error, setError] = useState("");
   const stop = useRef({ stop: false });
   useEffect(() => () => void (stop.current.stop = true), []);
-  const run = async (start: () => Promise<{ job_id: string }>) => {
+  const run = async (start: () => Promise<{ job_id: string }>, profile?: string | null) => {
     setRunning(true);
     setError("");
     setResult(null);
@@ -426,6 +426,7 @@ function useTestRunner() {
           setProgress(p ?? null);
         },
         stop.current,
+        profile,
       );
       if (job.status === "failed") setError(job.error ?? "The test failed.");
       else setResult(job.result);
@@ -463,6 +464,8 @@ function StrategyPanel({
   const lab = row.kind === "lab";
   const testable = lab || !!row.testable;
   const [universe, setUniverse] = useState("nifty100");
+  const [sessions, setSessions] = useState(40);
+  const intraday = row.id === "intraday";
 
   useEffect(() => {
     if (!testable) return;
@@ -552,25 +555,41 @@ function StrategyPanel({
                 ))}
               </select>
             )}
-            <select className="min-h-9 rounded-md border border-border bg-background px-2 text-sm" value={years} onChange={(e) => setYears(Number(e.target.value))} aria-label="Years of history">
-              {[1, 2, 3, 5].map((y) => (
-                <option key={y} value={y}>
-                  {y} year{y > 1 ? "s" : ""}
-                </option>
-              ))}
-            </select>
+            {intraday ? (
+              <select className="min-h-9 rounded-md border border-border bg-background px-2 text-sm" value={sessions} onChange={(e) => setSessions(Number(e.target.value))} aria-label="Trading days to replay">
+                {[20, 40, 55].map((n) => (
+                  <option key={n} value={n}>
+                    Last {n} days
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select className="min-h-9 rounded-md border border-border bg-background px-2 text-sm" value={years} onChange={(e) => setYears(Number(e.target.value))} aria-label="Years of history">
+                {[1, 2, 3, 5].map((y) => (
+                  <option key={y} value={y}>
+                    {y} year{y > 1 ? "s" : ""}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               type="button"
               disabled={tr.running || !canEdit}
               onClick={() =>
-                void tr.run(() => strategiesApi.test(row.id, years, profile, row.id === "signal_board" ? universe : undefined).then((r) => ({ job_id: r.job_id })))
+                void tr.run(
+                  () =>
+                    strategiesApi
+                      .test(row.id, years, profile, row.id === "signal_board" ? universe : undefined, intraday ? sessions : undefined)
+                      .then((r) => ({ job_id: r.job_id })),
+                  profile,
+                )
               }
               className="min-h-9 px-3 rounded-md border border-border text-sm inline-flex items-center gap-1 disabled:opacity-60"
             >
               <FlaskConical className="h-4 w-4" aria-hidden />{" "}
               {tr.running
                 ? tr.progress
-                  ? `Testing… ${tr.progress.done} of ${tr.progress.total} ${row.id === "btst" ? "days" : "stocks"}`
+                  ? `Testing… ${tr.progress.done} of ${tr.progress.total} ${row.id === "signal_board" ? "stocks" : "days"}`
                   : `Testing… ${tr.secs}s`
                 : "Run test"}
             </button>

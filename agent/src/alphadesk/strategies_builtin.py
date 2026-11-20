@@ -27,11 +27,14 @@ import numpy as np
 from src.alphadesk import strategies as S
 
 logger = logging.getLogger(__name__)
-TESTABLE = ("signal_board", "btst")
+TESTABLE = ("signal_board", "btst", "intraday")
 NOTES = {
     "signal_board": ("Price votes only (Kronos isn't replayed): trend, structure and momentum must all agree. "
                      "Trades open at the signal day's close and exit at the stop (1.5x ATR), the target (3x ATR) "
                      "or after 20 sessions. If a day touched both, the stop is assumed first."),
+    "intraday": ("Each past day re-planned from data before it (the same scan, opening range, market filter, "
+                 "trade cap, stop, target and 15:15 square-off), traced on 5-minute prices net of NSE intraday costs. "
+                 "5-minute prices only go back about 60 days. Nothing is added to the paper record."),
     "btst": ("Each past day rebuilt from the NSE closing prices (they stand in for 15:20), the pick bought at the "
              "close and sold the next session with the live rules' take-profit and stop. If the next day touched "
              "both, the stop is assumed first."),
@@ -184,10 +187,61 @@ def run_btst(years: int, progress: Callable[[int, int], None] | None = None) -> 
     return res
 
 
+# --- intraday -----------------------------------------------------------------------------------------
+
+
+def run_intraday(sessions: int = 40, progress: Callable[[int, int], None] | None = None,
+                 today: date | None = None) -> dict[str, Any]:
+    """Re-run the opening-range breakout on recent past days without filing them (5-minute data: ~60 days)."""
+    from src.alphadesk.intraday import calendar as cal
+    from src.alphadesk.intraday import days as D
+
+    today = today or date.today()
+    settings = D.load_settings()
+    todo: list[date] = []
+    d = today - timedelta(days=1)
+    while len(todo) < sessions and d > today - timedelta(days=58):  # Yahoo's 5-minute window
+        if cal.is_trading_day(d):
+            todo.append(d)
+        d -= timedelta(days=1)
+    todo.reverse()
+    trades: list[dict[str, Any]] = []
+    tested, failed = 0, 0
+    for i, d in enumerate(todo):
+        if progress:
+            progress(i, len(todo))
+        try:
+            rec = D.new_record(d, settings)
+            rec.update(D.plan_open(d, settings, past=True))
+            ev = D.evaluate(d, rec, settings, None)
+        except Exception as exc:  # noqa: BLE001 - one bad day must not stop the rest
+            logger.info("intraday test %s: %s", d, exc)
+            failed += 1
+            continue
+        tested += 1
+        for t in ev["trades"]:
+            if t.get("status") == "open" or not t.get("entry") or not t.get("qty"):
+                continue
+            notional = t["entry"] * t["qty"]
+            net = t["pnl_inr"] / notional * 100
+            gross = t["r_gross"] * t["risk_per_share"] / t["entry"] * 100
+            trades.append({"symbol": t["symbol"], "side": t["side"].upper(), "entry_date": d.isoformat(),
+                           "exit_date": d.isoformat(), "gross_pct": round(gross, 3), "net_pct": round(net, 3),
+                           "reason": t.get("status") or ""})
+    if progress:
+        progress(len(todo), len(todo))
+    cost = round(float(np.mean([t["gross_pct"] - t["net_pct"] for t in trades])), 3) if trades else 0.0
+    res = scorecard(trades, random_avg=None, random_label="", years=0, cost_pct=cost,
+                    symbols_tested=len({t["symbol"] for t in trades}), note=NOTES["intraday"])
+    res.update(days=tested, skipped_days=sum(1 for d in todo if not any(t["entry_date"] == d.isoformat() for t in trades)) - failed,
+               failed_days=failed, sessions=len(todo))
+    return res
+
+
 # --- jobs ---------------------------------------------------------------------------------------------
 
 
-def start(sid: str, years: int = 3, universe: str = "nifty100") -> str:
+def start(sid: str, years: int = 3, universe: str = "nifty100", sessions: int = 40) -> str:
     """Run a built-in's past test in the background; poll it with ``strategies.job``."""
     from src.alphadesk import profiles
     from src.alphadesk.index_lists import UNIVERSES
@@ -211,9 +265,14 @@ def start(sid: str, years: int = 3, universe: str = "nifty100") -> str:
 
     def work() -> None:
         try:
-            res = run_btst(years, progress) if sid == "btst" else run_signal_board(years, universe, progress)
+            if sid == "btst":
+                res = run_btst(years, progress)
+            elif sid == "intraday":
+                res = run_intraday(int(min(55, max(5, sessions))), progress)
+            else:
+                res = run_signal_board(years, universe, progress)
             res["ran_at"] = datetime.now().isoformat(timespec="seconds")
-            S.record_test(sid, res, years)
+            S.record_test(sid, res, res.get("years", years))
             with S._JOBS_LOCK:
                 S._JOBS[job_id].update(status="done", result=res)
         except Exception as exc:  # noqa: BLE001 - shown to the person

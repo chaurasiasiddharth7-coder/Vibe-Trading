@@ -54,6 +54,7 @@ export interface TestResult {
   universe?: string;
   days?: number;
   skipped_days?: number;
+  sessions?: number;
 }
 
 export interface StrategyRow {
@@ -125,14 +126,14 @@ export const strategiesApi = {
       method: "PUT",
       ...json({ on }),
     }),
-  test: (id: string, years: number, profile?: string | null, universe?: string) =>
+  test: (id: string, years: number, profile?: string | null, universe?: string, sessions?: number) =>
     request<{ ok: boolean; job_id: string }>(`/api/desk/strategies/${encodeURIComponent(id)}/test${q(profile)}`, {
       method: "POST",
-      ...json(universe ? { years, universe } : { years }),
+      ...json({ years, ...(universe ? { universe } : {}), ...(sessions ? { sessions } : {}) }),
     }),
   tryRules: (rules: Rules, years: number) =>
     request<{ ok: boolean; job_id: string }>("/api/desk/strategies/test", { method: "POST", ...json({ rules, years }) }),
-  job: (jobId: string) => request<Ok<Job>>(`/api/desk/strategies/jobs/${encodeURIComponent(jobId)}`),
+  job: (jobId: string, profile?: string | null) => request<Ok<Job>>(`/api/desk/strategies/jobs/${encodeURIComponent(jobId)}${q(profile)}`),
   scanNow: (id: string, profile?: string | null) =>
     request<Ok<{ opened: Array<{ symbol: string }>; skipped: Array<{ symbol: string; why: string }>; note?: string }>>(
       `/api/desk/strategies/${encodeURIComponent(id)}/scan-now${q(profile)}`,
@@ -147,11 +148,13 @@ export async function waitForJob(
   jobId: string,
   onTick?: (seconds: number, progress?: { done: number; total: number }) => void,
   signal?: { stop: boolean },
+  profile?: string | null,
 ): Promise<Job> {
   const started = Date.now();
   for (;;) {
     if (signal?.stop) throw new Error("stopped");
-    const r = await strategiesApi.job(jobId);
+    // Tests the owner starts in someone else's profile live in that profile.
+    const r = await strategiesApi.job(jobId, profile);
     if (r.data.status !== "running") return r.data;
     if (Date.now() - started > 1_800_000) throw new Error("The test is taking too long. Try fewer years or symbols.");
     onTick?.(Math.round((Date.now() - started) / 1000), r.data.total ? { done: r.data.done ?? 0, total: r.data.total } : undefined);
