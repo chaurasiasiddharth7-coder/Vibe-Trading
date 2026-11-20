@@ -5,8 +5,8 @@
 @layer base {
   :root {
     /* Light mode surfaces */
-    --background: 220 20% 98%;
-    --foreground: 220 20% 10%;
+    --background: 220 14% 95%;
+    --foreground: 220 9% 20%;
     --card: 0 0% 100%;
     --card-foreground: 220 20% 10%;
 
@@ -17,20 +17,20 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 20% 10%;
 
-    /* Brand accent */
-    --primary: 27 90% 52%;
+    /* Accent: calm broker blue (tabs, links, the selected item) */
+    --primary: 213 62% 52%;
     --primary-foreground: 0 0% 100%;
 
-    --muted: 220 14% 92%;
-    --muted-foreground: 220 14% 46%;
-    --destructive: 0 84% 60%;
+    --muted: 220 14% 94%;
+    --muted-foreground: 220 9% 56%;
+    --destructive: 2 70% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 14% 87%;
+    --border: 220 13% 90%;
     --radius: 0.5rem;
 
-    /* Semantic colors */
-    --success: 142 71% 45%;
-    --danger: 0 84% 60%;
+    /* Semantic colors: price up / down */
+    --success: 122 39% 49%;
+    --danger: 2 70% 58%;
     --warning: 38 92% 50%;
     --info: 217 91% 60%;
 
@@ -44,26 +44,26 @@
 
   .dark {
     /* Dark mode: 4-level surface system */
-    --background: 220 20% 5%;       /* bg-base */
-    --foreground: 220 10% 92%;
-    --card: 220 20% 8%;             /* surface-1 */
-    --card-foreground: 220 10% 92%;
+    --background: 0 0% 7%;          /* bg-base, near black */
+    --foreground: 0 0% 88%;
+    --card: 0 0% 10%;               /* surface-1 */
+    --card-foreground: 0 0% 88%;
 
-    --popover: 220 20% 9%;          /* surface-1.5 (slightly lighter than card) */
-    --popover-foreground: 220 10% 92%;
+    --popover: 0 0% 12%;            /* surface-1.5 (slightly lighter than card) */
+    --popover-foreground: 0 0% 88%;
 
-    --primary: 27 90% 52%;
+    --primary: 213 70% 62%;
     --primary-foreground: 0 0% 100%;
 
-    --muted: 220 20% 13%;           /* surface-2 */
-    --muted-foreground: 220 10% 55%;
-    --destructive: 0 62% 50%;
+    --muted: 0 0% 15%;              /* surface-2 */
+    --muted-foreground: 0 0% 58%;
+    --destructive: 2 65% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 20% 18%;          /* surface-3 */
+    --border: 0 0% 18%;             /* surface-3 */
 
     /* Semantic colors */
-    --success: 142 71% 45%;
-    --danger: 0 62% 50%;
+    --success: 122 39% 55%;
+    --danger: 2 65% 60%;
     --warning: 38 92% 50%;
     --info: 217 91% 60%;
 
@@ -107,4 +107,10 @@
 }
 @media print {
   [data-privacy="on"] main .font-mono { filter: none; visibility: hidden; }
+}
+
+@layer utilities {
+  /* Swipeable tab rows (watchlists) without a visible scrollbar. */
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
 }

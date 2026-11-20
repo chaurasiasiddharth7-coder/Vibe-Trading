@@ -1,6 +1,6 @@
 import { ApiError, api } from "@/lib/api";
 
-export type Progress = { done: number; total: number } | null;
+export type Progress = { done: number; total: number; phase?: "prices" | "forecast" } | null;
 
 /** Thrown when the server no longer knows the job (it restarted while the scan ran). */
 export class JobLostError extends Error {
@@ -36,7 +36,7 @@ export async function pollJob<T>(
     try {
       const { job } = await api.getBoardJob<T>(jobId);
       blips = 0;
-      onProgress({ done: job.done, total: job.total });
+      onProgress({ done: job.done, total: job.total, phase: job.phase });
       if (job.status === "done") return job.result;
       if (job.status === "failed") throw new Error(job.error ?? "scan failed");
     } catch (e) {

@@ -165,12 +165,29 @@ def classify(
     }
 
 
+LIVE_MAX_AGE_S = 60
+
+
+def _live() -> bool:
+    try:
+        from src.live.profit_guard.feeds import live_quotes
+
+        return live_quotes.session_has_started() and live_quotes.active()
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _load_analysis(symbol: str) -> dict[str, Any]:
     from src.alphadesk.analysis import analyze_symbol
     from src.alphadesk.cache import PRICE_MAX_AGE_S, get_cached, set_cached
 
-    params = {"interval": "1d", "period": "6mo"}
-    analysis = get_cached("analysis", symbol, max_age_s=PRICE_MAX_AGE_S, **params)
+    params: dict[str, Any] = {"interval": "1d", "period": "6mo"}
+    max_age = PRICE_MAX_AGE_S
+    if _live():
+        # Kite numbers: a separate cache entry (never served to other profiles) kept for a minute.
+        params["src"] = "kite"
+        max_age = LIVE_MAX_AGE_S
+    analysis = get_cached("analysis", symbol, max_age_s=max_age, **params)
     if analysis is None:
         analysis = analyze_symbol(symbol, period="6mo", interval="1d")
         set_cached("analysis", symbol, analysis, **params)
@@ -277,6 +294,12 @@ def build_board(
     for m in members:
         seen.setdefault(m["symbol"].upper().replace(".NS", "").replace(".BO", ""), m)
 
+    live = _live()
+    if live:
+        from src.live.profit_guard.feeds import live_quotes
+
+        live_quotes.prime(list(seen))  # one Kite call for the whole list
+
     rows: list[dict[str, Any]] = []
     failed: list[dict[str, str]] = []
     total = len(seen)
@@ -328,6 +351,7 @@ def build_board(
         "rows": rows,
         "scanned": len(rows),
         "kronos_live": with_kronos,
+        "live": {"source": "kite", "at": datetime.now(timezone.utc).isoformat()} if live else None,
         "as_of": max((r["as_of"] for r in rows if r.get("as_of")), default=None),
         "failed": failed,
         "track_record": track_record(),

@@ -64,8 +64,8 @@ def _start(kind: str, key: str, work: Callable[[Callable[[int, int], None]], Any
             "error": None,
         }
 
-    def progress(done: int, total: int) -> None:
-        _JOBS[job_id].update(done=done, total=total)
+    def progress(done: int, total: int, **extra: Any) -> None:
+        _JOBS[job_id].update(done=done, total=total, **extra)
 
     def run() -> None:
         try:
@@ -77,6 +77,15 @@ def _start(kind: str, key: str, work: Callable[[Callable[[int, int], None]], Any
 
     threading.Thread(target=profiles.carry(run), name=f"board-{kind}-{key}", daemon=True).start()
     return job_id
+
+
+def _forecast_available() -> bool:
+    from src.alphadesk.signal_board import _kronos_available
+
+    try:
+        return _kronos_available()
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def start_scan(universe: str, *, include_funds: bool) -> str:
@@ -93,10 +102,21 @@ def start_scan(universe: str, *, include_funds: bool) -> str:
         members = scan_list(universe, include_funds=include_funds)
         if not members:
             raise RuntimeError(f"no members for {universe} (NSE list unavailable)")
-        board = build_board(members=members, progress=progress, universe_key=universe)
+        # Pass 1: every stock from prices (seconds with the NSE store). The page shows these ideas at once.
+        board = build_board(members=members, with_kronos=False, universe_key=universe,
+                            progress=lambda d, t: progress(d, t, phase="prices"))
         board = {**board, "just_closed": settled, "include_funds": include_funds}
-        save_last(universe, board)
-        return board
+        if not _forecast_available():
+            save_last(universe, board)
+            return board
+        save_last(universe, {**board, "forecast_pending": True})
+        progress(0, len(members), phase="forecast")  # the page now loads the saved price-only board
+        # Pass 2: the AI forecast for the stocks whose price votes already lean one way (prices are cached now).
+        full = build_board(members=members, with_kronos=True, universe_key=universe,
+                           progress=lambda d, t: progress(d, t, phase="forecast"))
+        full = {**full, "just_closed": settled, "include_funds": include_funds}
+        save_last(universe, full)
+        return full
 
     return _start("scan", f"{universe}:{int(include_funds)}", work)
 

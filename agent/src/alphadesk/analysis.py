@@ -35,6 +35,17 @@ def _col(df: pd.DataFrame, *names: str) -> pd.Series:
     raise KeyError(f"missing column among {names}; have {list(df.columns)}")
 
 
+def _live_today(frame: pd.DataFrame, ticker: str) -> pd.DataFrame:
+    """Owner's desk with a fresh Kite login: replace/append today's bar with Kite's live numbers."""
+    try:
+        from src.live.profit_guard.feeds import live_quotes
+
+        frame, _used = live_quotes.overlay(frame, ticker)
+    except Exception:  # noqa: BLE001 - live prices are a bonus, never a reason to fail
+        pass
+    return frame
+
+
 def fetch_india_ohlcv(
     symbol: str, *, period: str = "6mo", interval: str = "1d"
 ) -> tuple[str, pd.DataFrame]:
@@ -57,7 +68,10 @@ def fetch_india_ohlcv(
         )
         frame = frames.get(ticker) if isinstance(frames, dict) else None
         if frame is not None and isinstance(frame, pd.DataFrame) and not frame.empty:
-            return ticker, frame.copy()
+            frame = frame.copy()
+            if loader_interval in ("1D", "1d"):
+                frame = _live_today(frame, ticker)
+            return ticker, frame
     raise LookupError(f"no OHLCV data for {last_ticker}")
 
 

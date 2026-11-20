@@ -181,6 +181,8 @@ export interface BoardJob<T> {
   status: "running" | "done" | "failed";
   done: number;
   total: number;
+  /** Scans run in two passes: "prices" (every stock, fast), then "forecast" (the AI forecast for the leaders). */
+  phase?: "prices" | "forecast";
   result: T | null;
   error: string | null;
 }
@@ -219,6 +221,8 @@ export interface SignalBoard {
   scanned: number;
   failed: Array<{ symbol: string; error: string }>;
   kronos_live: boolean;
+  /** Set when today's prices came from Kite (owner's desk, during the session). */
+  live?: { source: "kite"; at: string } | null;
   as_of: string | null;
   method: string;
   track_record: TrackRecord;

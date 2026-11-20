@@ -1,59 +1,42 @@
 import { renderHook, act } from "@testing-library/react";
-import { useDarkMode } from "../useDarkMode";
+import { setThemeMode, useDarkMode } from "../useDarkMode";
 
-describe("useDarkMode", () => {
+describe("useDarkMode (shared Light / Dark / System setting)", () => {
   beforeEach(() => {
+    act(() => setThemeMode("system"));
     localStorage.clear();
-    document.documentElement.classList.remove("dark");
   });
 
-  it("defaults to light when no preference stored and OS is light", () => {
+  it("follows the system (light in tests) by default", () => {
     const { result } = renderHook(() => useDarkMode());
+    expect(result.current.mode).toBe("system");
     expect(result.current.dark).toBe(false);
   });
 
-  it("reads dark preference from localStorage", () => {
-    localStorage.setItem("qa-theme", "dark");
+  it("dark mode sets the class and remembers it", () => {
     const { result } = renderHook(() => useDarkMode());
+    act(() => result.current.setMode("dark"));
     expect(result.current.dark).toBe(true);
-  });
-
-  it("reads light preference from localStorage", () => {
-    localStorage.setItem("qa-theme", "light");
-    const { result } = renderHook(() => useDarkMode());
-    expect(result.current.dark).toBe(false);
-  });
-
-  it("toggles dark mode", () => {
-    const { result } = renderHook(() => useDarkMode());
-    expect(result.current.dark).toBe(false);
-
-    act(() => result.current.toggle());
-    expect(result.current.dark).toBe(true);
-
-    act(() => result.current.toggle());
-    expect(result.current.dark).toBe(false);
-  });
-
-  it("persists preference to localStorage on change", () => {
-    const { result } = renderHook(() => useDarkMode());
-    expect(localStorage.getItem("qa-theme")).toBe("light");
-
-    act(() => result.current.toggle());
-    expect(localStorage.getItem("qa-theme")).toBe("dark");
-
-    act(() => result.current.toggle());
-    expect(localStorage.getItem("qa-theme")).toBe("light");
-  });
-
-  it("toggles dark class on document.documentElement", () => {
-    const { result } = renderHook(() => useDarkMode());
-    expect(document.documentElement.classList.contains("dark")).toBe(false);
-
-    act(() => result.current.toggle());
     expect(document.documentElement.classList.contains("dark")).toBe(true);
-
-    act(() => result.current.toggle());
+    expect(localStorage.getItem("qa-theme")).toBe("dark");
+    act(() => result.current.setMode("light"));
+    expect(result.current.dark).toBe(false);
     expect(document.documentElement.classList.contains("dark")).toBe(false);
+  });
+
+  it("toggle flips between light and dark", () => {
+    const { result } = renderHook(() => useDarkMode());
+    act(() => result.current.toggle());
+    expect(result.current.dark).toBe(true);
+    act(() => result.current.toggle());
+    expect(result.current.dark).toBe(false);
+    expect(localStorage.getItem("qa-theme")).toBe("light");
+  });
+
+  it("every user of the hook sees the same change", () => {
+    const a = renderHook(() => useDarkMode());
+    const b = renderHook(() => useDarkMode());
+    act(() => a.result.current.setMode("dark"));
+    expect(b.result.current.dark).toBe(true);
   });
 });

@@ -70,7 +70,11 @@ const toView = (data: ApiAnalysis): AnalysisView => ({
 export function Desk({ embedded = false }: { embedded?: boolean } = {}) {
   const Shell = embedded ? "div" : "main";
   const Heading = embedded ? "h2" : "h1";
-  const [symbol, setSymbol] = useState("RELIANCE");
+  // Opened from a watchlist row: /dashboard?tab=chart&symbol=LT
+  const [symbol, setSymbol] = useState(() => {
+    const want = new URLSearchParams(window.location.search).get("symbol")?.toUpperCase().replace(/[^A-Z0-9&-]/g, "");
+    return want || "RELIANCE";
+  });
   const [custom, setCustom] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
