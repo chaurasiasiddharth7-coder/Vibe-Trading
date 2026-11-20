@@ -54,6 +54,14 @@ executor:
   exits_when_halted: true     # HALT blocks new risk; protective exits (stops, locks, square-off) still go out
   tick_size: 0.05
 
+bridge:                       # hands the desk's strategies to the guard (paper): see bridge.py
+  enabled: true
+  btst: true                  # today's overnight pick, bought on paper after the 15:20 scan
+  signal_board: true          # open "Today's ideas" practice trades, mirrored once each
+  risk_per_trade_pct: 0.5     # a stop-out loses at most 0.5% of capital_inr...
+  max_position_pct: 20.0      # ...and no position is bigger than 20% of it
+  btst_backstop_target_pct: 5.0  # overnight GTT backstop only; the tiered lock manages the real exit
+
 strategies:                   # per-strategy overrides, merged over the sections above
   btst:
     layer1:
@@ -66,6 +74,14 @@ strategies:                   # per-strategy overrides, merged over the sections
       trail_pct: 20.0
       time_stop_bars: 6
   swing:
+    layer1:
+      chandelier_atr_k: 3.0
+      time_stop_bars: 0
+  signal_board:               # practice trades handed over by the bridge: multi-day swing exits
+    layer1:
+      chandelier_atr_k: 3.0
+      time_stop_bars: 0
+  lab:                        # Strategies-page lab trades: same as the signal board
     layer1:
       chandelier_atr_k: 3.0
       time_stop_bars: 0

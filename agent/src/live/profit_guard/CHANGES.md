@@ -118,3 +118,13 @@ Independent audit: full suite 6306 passed / 19 failed (18 pre-existing library/c
 Also: paper order ids reserved above every id the store references (no reuse after a crash); server Kite login
 requires `KITE_OWNER_USER_ID`; morning/arena/PM tools are owner-only for password users; api_server routes via
 `src/api/desk_pages_routes.py`.
+
+## 20 Nov 2026 (late): bridge, so the guard has positions to guard
+- `bridge.py`, run inside the runner every 60s in market phases: today's overnight (BTST) pick is bought on paper
+  after the 15:20 scan with the pick's stop (no +1% target: P7 showed it loses; +5% only as the GTT backstop), and
+  every OPEN signal-board / Strategies-lab practice trade is mirrored once with its current stop and target.
+- Sizing: a stop-out risks at most 0.5% of capital, no position above 20% of capital (`bridge:` in the yaml).
+- Hand-overs go through the inbox; the store remembers them (`meta.bridge_done`), so restarts never re-enter.
+- Runner: honours a handed-over stop/target; refuses an entry whose price is already past its stop.
+- Hosted practice trades are read too when `DESK_API_KEY` (owner key) is set in agent/.env; otherwise this Mac's.
+- Status page labels each position with its source. Tests: `tests/profit_guard/test_bridge.py` (8).

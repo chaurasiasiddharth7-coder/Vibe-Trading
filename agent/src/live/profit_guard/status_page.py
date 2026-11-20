@@ -24,6 +24,8 @@ from src.live.profit_guard import session
 ROOT = Path(__file__).resolve().parents[4]  # repo root (agent/src/live/profit_guard -> repo)
 PR_URL = "https://github.com/chaurasiasiddharth7-coder/Vibe-Trading/pull/1"
 REFRESH_S = 60
+LABEL = {"btst": "overnight", "signal_board": "signal board", "lab": "Strategies lab", "swing": "swing",
+         "manual": "manual"}
 
 
 def _d(v: Any) -> Decimal:
@@ -149,7 +151,8 @@ def render(s: dict[str, Any]) -> str:
         for p in ps:
             r = _d(p.get("realized"))
             out.append("<tr>" + "".join(f"<td>{x}</td>" for x in (
-                _e(p.get("symbol")), _e(p.get("side")), _e(p.get("qty_open") or p.get("qty")), _e(p.get("entry")),
+                f"{_e(p.get('symbol'))} <span class=m>{_e(LABEL.get(p.get('strategy'), p.get('strategy') or ''))}</span>",
+                _e(p.get("side")), _e(p.get("qty_open") or p.get("qty")), _e(p.get("entry")),
                 _e(p.get("exit_price") if closed else p.get("stop")),
                 f"<span style='color:{good if r >= 0 else bad}'>{'+' if r >= 0 else '−'}₹{abs(r):,.0f}</span>" if closed
                 else _e(p.get("target") or "—"))) + "</tr>")

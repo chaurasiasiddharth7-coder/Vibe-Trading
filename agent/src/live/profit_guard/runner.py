@@ -83,6 +83,12 @@ class GuardRunner:
 
     def __post_init__(self) -> None:
         self.executor = Executor(self.store, self.broker, self.cfg, broker_key=self.broker_key)
+        from src.live.profit_guard.bridge import Bridge
+
+        self.bridge = Bridge(self.cfg.raw, self.store.get_meta, self.store.set_meta,
+                             lambda req: queue_entry(req, self.inbox) if self.inbox else None,
+                             lambda: {p.symbol.upper() for p in self.store.open_plans()}
+                             | {str(e["symbol"]).upper() for e in self._entries.values()})
 
     # -- lifecycle ---------------------------------------------------------------
     def start(self, now_ms: int) -> list[Alert]:
@@ -186,6 +192,8 @@ class GuardRunner:
         if ltp is None:
             return Alert("warn", f"Entry {sym} refused: no price yet")
         side = Side(req.get("side", "LONG"))
+        if req.get("stop") is not None and (dec(req["stop"]) - ltp) * side.sign >= 0:
+            return Alert("warn", f"Entry {sym} refused: price {ltp} is already past its stop {req['stop']}")
         tick = dec(self.cfg.ex["tick_size"])
         limit = rules.round_to_tick(ltp * (1 + side.sign * ENTRY_SLIP), tick, up=side is Side.LONG)
         o = self.broker.submit_limit(sym, "buy" if side is Side.LONG else "sell", qty, limit, tag="entry", now_ms=now_ms)
@@ -215,6 +223,16 @@ class GuardRunner:
             atr = dec(e["atr"]) if e.get("atr") else fill * Decimal("0.01")
             stop, t1, target, one_r = rules.initial_levels(side, fill, atr, cfg,
                                                            dec(e["swing"]) if e.get("swing") else None)
+            if e.get("stop") is not None and (fill - dec(e["stop"])) * side.sign > 0:
+                # A stop handed over by a strategy (overnight pick, practice trade) replaces the ATR stop.
+                stop = rules.round_to_tick(dec(e["stop"]), dec(cfg.ex["tick_size"]), up=side is not Side.LONG)
+                one_r = abs(fill - stop)
+                t1 = fill + side.sign * one_r * dec(cfg.l1.get("scale_out_at_r") or 1)
+                if target is not None and cfg.l1.get("target_r") is not None:
+                    target = rules.round_to_tick(fill + side.sign * one_r * dec(cfg.l1["target_r"]),
+                                                 dec(cfg.ex["tick_size"]), up=side is Side.LONG)
+            if e.get("target") is not None and (dec(e["target"]) - fill) * side.sign > 0:
+                target = rules.round_to_tick(dec(e["target"]), dec(cfg.ex["tick_size"]), up=side is Side.LONG)
             if e.get("target_pct") is not None:
                 target = rules.round_to_tick(fill * (1 + side.sign * dec(e["target_pct"]) / 100), dec(cfg.ex["tick_size"]),
                                              up=side is Side.LONG)
@@ -239,6 +257,13 @@ class GuardRunner:
                                       square_off=self.cfg.time("square_off"))
         today = session.trade_date(now_ms)
         plans = self.store.open_plans()
+        # Strategies hand their positions over (overnight pick, practice trades) through the inbox.
+        if self.inbox is not None:
+            try:
+                for line in self.bridge.poll(now_ms, phase, today):
+                    logger.info("bridge queued %s", line)
+            except Exception as exc:  # noqa: BLE001 - the bridge must never stop the guard
+                logger.warning("bridge failed: %s", exc)
         # Before the open the requests stay in the file and are read at 09:15, instead of being refused and lost.
         requests = self._read_inbox() if phase not in ("closed", "preopen") else []
         symbols = sorted({p.symbol for p in plans} | {str(r["symbol"]).upper() for r in requests}
