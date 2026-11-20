@@ -23,6 +23,9 @@ show_status() {  # open the at-a-glance page once a day (it refreshes itself eve
 
 echo "$(date) guard_daemon start" >> "$LOG"
 show_status
+# Morning catch-up: if last evening's NSE price update didn't run (Mac asleep, no login), fetch it now.
+( "$PY" ../scripts/nse_pull.py --update >> "$ROOT/logs/nse-update-$(date +%F).log" 2>&1 \
+    && echo "$(date) NSE price store caught up" >> "$LOG" ) &
 n=0
 until fresh; do
   if [ "$(now_hm)" -ge 1530 ]; then echo "$(date) no Kite login today; guard not started" >> "$LOG"; notify "No Kite login today: guard did not run"; exit 0; fi
@@ -77,3 +80,12 @@ done
 echo "$(date) guard stopped for the day ($CRASHES crash(es))" >> "$LOG"
 status
 notify "$("$PY" -m src.live.profit_guard.status_page --summary 2>/dev/null || echo 'Paper guard stopped for the day.')"
+
+# Evening: refresh the NSE price store (overnight picks and scans read it). NSE publishes the bhavcopy after ~18:00.
+while [ "$(now_hm)" -lt 1915 ]; do sleep 300; done
+if "$PY" ../scripts/nse_pull.py --update >> "$ROOT/logs/nse-update-$(date +%F).log" 2>&1; then
+  echo "$(date) NSE price store updated" >> "$LOG"
+else
+  echo "$(date) NSE price store update FAILED (see logs/nse-update-$(date +%F).log)" >> "$LOG"
+  notify "NSE price store update failed tonight. Scans will use older prices."
+fi

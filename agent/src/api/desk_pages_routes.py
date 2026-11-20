@@ -15,3 +15,10 @@ def register_desk_pages_routes(app: FastAPI, require_auth: Callable[..., Awaitab
     register_users_routes(app, require_auth)
     register_wealth_routes(app, require_auth)
     register_strategies_routes(app, require_auth)
+
+    import os
+
+    if os.environ.get("INTRADAY_SCHEDULER", "") == "1":  # the hosted server: keep the NSE price store current
+        from src.alphadesk import nse_daily
+
+        nse_daily.start()

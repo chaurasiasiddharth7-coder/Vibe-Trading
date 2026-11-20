@@ -170,7 +170,9 @@ def build_bars(root: Path) -> None:
     if not frames:
         raise SystemExit("no bhavcopy files on disk")
     bars = pd.concat(frames, ignore_index=True).sort_values(["symbol", "date"])
-    bars.to_parquet(root / "bars.parquet", index=False, row_group_size=200_000)
+    tmp = root / "bars.parquet.tmp"  # write then swap, so a scan reading the store never sees half a file
+    bars.to_parquet(tmp, index=False, row_group_size=200_000)
+    tmp.replace(root / "bars.parquet")
     print(f"bars.parquet: {len(bars):,} rows, {bars['date'].nunique()} sessions, "
           f"{bars['isin'].nunique()} ISINs")
 
