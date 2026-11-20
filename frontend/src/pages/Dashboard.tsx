@@ -11,6 +11,7 @@ import { DASHBOARD_ONLY } from "@/lib/hosted";
 import { CustomizePanel } from "@/components/desk/CustomizePanel";
 import { investedDate } from "@/components/desk/tradeFilters";
 import { DeskPrefsProvider, useDeskPrefs, visibleTiles } from "@/lib/deskPrefs";
+import { GuardStrip } from "@/components/desk/GuardStrip";
 
 const Desk = lazy(() => import("@/pages/Desk").then((m) => ({ default: m.Desk })));
 
@@ -136,7 +137,7 @@ function DashboardView() {
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold flex items-center gap-2">
           <LayoutDashboard className="h-6 w-6 text-muted-foreground" aria-hidden />
-          Dashboard
+          {DASHBOARD_ONLY ? "Stocks" : "Dashboard"}
         </h1>
         <p className="text-sm text-muted-foreground max-w-2xl">
           Today's ideas, your practice trades and the charts, in one place. All trades here use fake money.
@@ -147,6 +148,8 @@ function DashboardView() {
           </p>
         )}
       </header>
+
+      <GuardStrip />
 
       {ready && <CustomizePanel />}
 

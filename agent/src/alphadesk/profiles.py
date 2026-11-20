@@ -142,10 +142,17 @@ def list_profiles() -> list[dict[str, Any]]:
     return [{"id": pid, **{k: v for k, v in rec.items() if k != "key_hash"}} for pid, rec in sorted(_load().items())]
 
 
-def create(profile_id: str, name: str) -> str:
-    """Add a profile and return its key. The key is shown once; only its hash is kept."""
+def create(profile_id: str, name: str, *, for_desk_user: bool = False) -> str:
+    """Add a profile and return its key. The key is shown once; only its hash is kept.
+
+    A connect-key profile can't take the id of a password user: the two would share one private desk."""
     if not _ID_RE.match(profile_id):
         raise ValueError("id must be 2-32 chars: lowercase letters, digits, - or _, starting with a letter")
+    if not for_desk_user:
+        from src.alphadesk import users
+
+        if users.db_path().exists() and users.get_user(profile_id) is not None:
+            raise ValueError(f"{profile_id!r} is a password user's name; pick another id")
     with _LOCK:
         users = _load()
         if profile_id in users:
@@ -182,6 +189,8 @@ def all_ids() -> list[str | None]:
 PREF_LAYOUTS = ("tabs", "stacked")
 PREF_DENSITY = ("comfortable", "compact")
 PREF_TILE_STYLES = ("cards", "strip")
+PREF_THEMES = ("system", "light", "dark")
+MAX_TILES_PER_PAGE = 4
 _ITEM_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 MAX_ITEMS = 60
 
@@ -190,7 +199,10 @@ def default_prefs() -> dict[str, Any]:
     """``tiles`` is the ordered list of tiles to show (``None`` = the app's default set). The ``hidden_*`` lists
     name what to hide, so anything added to the app later shows up on its own."""
     return {"version": 1, "layout": "tabs", "density": "comfortable", "tile_style": "cards",
-            "tiles": None, "hidden_tabs": [], "hidden_filters": [], "hidden_rows": []}
+            "tiles": None, "hidden_tabs": [], "hidden_filters": [], "hidden_rows": [],
+            # App-wide layout (Kite-style shell): which pages show in the top menu, in what order, where to land.
+            "pages_order": [], "hidden_pages": [], "landing_page": "stocks", "privacy_mode": False,
+            "theme": "system", "tiles_by_page": {}}
 
 
 def _ids(raw: Any) -> list[str]:
@@ -218,8 +230,17 @@ def clean_prefs(raw: Any) -> dict[str, Any]:
     if raw.get("tile_style") in PREF_TILE_STYLES:
         out["tile_style"] = raw["tile_style"]
     out["tiles"] = _ids(raw["tiles"]) if isinstance(raw.get("tiles"), list) else None
-    for k in ("hidden_tabs", "hidden_filters", "hidden_rows"):
+    for k in ("hidden_tabs", "hidden_filters", "hidden_rows", "pages_order", "hidden_pages"):
         out[k] = _ids(raw.get(k))
+    if isinstance(raw.get("landing_page"), str) and _ITEM_RE.match(raw["landing_page"]):
+        out["landing_page"] = raw["landing_page"]
+    out["privacy_mode"] = raw.get("privacy_mode") is True
+    if raw.get("theme") in PREF_THEMES:
+        out["theme"] = raw["theme"]
+    tbp = raw.get("tiles_by_page")
+    if isinstance(tbp, dict):
+        out["tiles_by_page"] = {k: _ids(v)[:MAX_TILES_PER_PAGE] for k, v in list(tbp.items())[:20]
+                                if isinstance(k, str) and _ITEM_RE.match(k)}
     return out
 
 

@@ -25,6 +25,11 @@ export function Layout() {
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/intraday", icon: Activity, label: "Intraday" },
     { to: "/btst", icon: Sunset, label: "Overnight" },
+    { to: "/fno", icon: Activity, label: "F&O" },
+    { to: "/wealth", icon: Layers, label: "Gold · ETF · MF" },
+    { to: "/portfolio", icon: BarChart3, label: "Portfolio" },
+    { to: "/suggestions", icon: FileText, label: "Suggestions" },
+    { to: "/users", icon: Bot, label: "Users" },
     { to: "/settings", icon: Settings, label: t('layout.settings') },
     { to: "/correlation", icon: BarChart3, label: t('layout.correlation') },
   ];

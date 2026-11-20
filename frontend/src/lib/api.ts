@@ -37,7 +37,7 @@ async function errorFromResponse(res: Response): Promise<ApiError> {
   return new ApiError(detail, res.status);
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+export async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const { headers, ...rest } = options ?? {};
   const mergedHeaders: Record<string, string> = { "Content-Type": "application/json", ...authHeaders() };
   if (headers) {

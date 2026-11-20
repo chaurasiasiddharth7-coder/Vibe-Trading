@@ -319,6 +319,9 @@ def close_trade(trade: dict[str, Any], exit_: dict[str, Any]) -> dict[str, Any]:
     pnl = round(exit_["r_multiple"] * risk_per_share * trade["qty"], 2)
     trade = {**trade, **exit_, "pnl_inr": pnl, "status": "CLOSED", "closed_at": _now()}
     _save(trade)
+    if trade.get("strategy_id"):
+        # A Strategy-lab trade: its record lives with its own strategy, not in the signal board's track record.
+        return trade
     record_outcome(
         trade["id"],
         {

@@ -108,6 +108,18 @@ MARKET_SPECS: Mapping[str, _MarketSpec] = {
         close_time=time(0, 0),
         always_open=True,
     ),
+    # NSE cash + F&O regular session, 09:15-15:30 IST (close exclusive). Holidays
+    # are deliberately NOT hard-coded here: the authoritative NSE list lives in the
+    # NSE store (src.alphadesk.intraday.calendar.holidays), which this stdlib-only
+    # module must not import. Profit Guard's session.session_phase() applies that
+    # list, so the guard stays closed on NSE holidays even though this spec says
+    # "open" on a weekday holiday.
+    "india_equity": _MarketSpec(
+        tz="Asia/Kolkata",
+        open_time=time(9, 15),
+        close_time=time(15, 30),
+        weekdays=_WEEKDAYS_MON_FRI,
+    ),
 }
 
 

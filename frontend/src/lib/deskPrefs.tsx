@@ -12,12 +12,25 @@ export interface DeskPrefs {
   hidden_tabs: string[];
   hidden_filters: string[];
   hidden_rows: string[];
+  /** App-wide layout: top-menu order, hidden pages, landing page, money hidden for screen sharing. */
+  pages_order: string[];
+  hidden_pages: string[];
+  landing_page: string;
+  privacy_mode: boolean;
+  theme: "system" | "light" | "dark";
+  /** Up to 4 tile ids per page. */
+  tiles_by_page: Record<string, string[]>;
 }
 
 export interface DeskMe {
   id: string | null;
   name: string;
   is_owner: boolean;
+  role?: "owner" | "trader" | "viewer";
+  username?: string | null;
+  signed_in_with?: "password" | "key";
+  must_change?: boolean;
+  pages?: string[];
   prefs: DeskPrefs;
 }
 
@@ -79,6 +92,12 @@ export const DEFAULT_PREFS: DeskPrefs = {
   hidden_tabs: [],
   hidden_filters: [],
   hidden_rows: [],
+  pages_order: [],
+  hidden_pages: [],
+  landing_page: "stocks",
+  privacy_mode: false,
+  theme: "system",
+  tiles_by_page: {},
 };
 
 const KNOWN = {
@@ -104,7 +123,26 @@ export function normalizePrefs(raw: Partial<DeskPrefs> | null | undefined): Desk
     hidden_tabs: hiddenTabs.length >= TABS.length ? [] : hiddenTabs,
     hidden_filters: only(r.hidden_filters, KNOWN.filters),
     hidden_rows: only(r.hidden_rows, KNOWN.rows),
+    pages_order: ids(r.pages_order),
+    hidden_pages: ids(r.hidden_pages),
+    landing_page: typeof r.landing_page === "string" && ID_RE.test(r.landing_page) ? r.landing_page : "stocks",
+    privacy_mode: r.privacy_mode === true,
+    theme: r.theme === "light" || r.theme === "dark" ? r.theme : "system",
+    tiles_by_page: tilesByPage(r.tiles_by_page),
   };
+}
+
+const ID_RE = /^[a-z][a-z0-9_]{0,39}$/;
+const ids = (xs: unknown): string[] =>
+  Array.isArray(xs) ? [...new Set(xs.filter((x): x is string => typeof x === "string" && ID_RE.test(x)))] : [];
+
+function tilesByPage(raw: unknown): Record<string, string[]> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (ID_RE.test(k)) out[k] = ids(v).slice(0, 4);
+  }
+  return out;
 }
 
 /** The tiles to draw, in order. */
@@ -192,8 +230,20 @@ export function DeskPrefsProvider({ children }: { children: ReactNode }) {
   );
 
   const reset = useCallback(() => {
-    setPrefs(DEFAULT_PREFS);
-    persist(DEFAULT_PREFS);
+    // Reset the dashboard's own view only; the app-wide layout (menu, landing page, privacy) stays.
+    setPrefs((cur) => {
+      const next: DeskPrefs = {
+        ...DEFAULT_PREFS,
+        pages_order: cur.pages_order,
+        hidden_pages: cur.hidden_pages,
+        landing_page: cur.landing_page,
+        privacy_mode: cur.privacy_mode,
+        theme: cur.theme,
+        tiles_by_page: cur.tiles_by_page,
+      };
+      persist(next);
+      return next;
+    });
   }, [persist]);
 
   const value = useMemo(() => build({ me, prefs, ready, saveState, update, reset }), [me, prefs, ready, saveState, update, reset]);

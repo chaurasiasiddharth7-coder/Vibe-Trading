@@ -83,12 +83,28 @@ def run_job(kind: str, now: datetime) -> dict:
         return days.run_settle(prev, "scheduler", now=now)
 
 
+def _paper_on(strategy_id: str) -> bool:
+    try:
+        from src.alphadesk.strategies import paper_on
+
+        return paper_on(strategy_id)
+    except Exception:  # noqa: BLE001 - a broken switch file must not stop the bot
+        return True
+
+
 def tick(now: datetime | None = None, runner=run_job) -> list[str]:
     from src.alphadesk.intraday import bars as ibars
 
     now = now or ibars.now_ist()
     state, done = load_state(), []
     for kind in due_jobs(now, state):
+        if kind == "scan" and not _paper_on("btst"):
+            # Paper switch off on the Strategies page: no new pick; yesterday's pick still settles.
+            state[kind] = {"date": now.date().isoformat(), "at": now.isoformat(timespec="seconds"), "ok": True,
+                           "note": "paper trading switched off on the Strategies page"}
+            save_state(state)
+            done.append("scan:skipped")
+            continue
         try:
             runner(kind, now)
             ok, note = True, ""

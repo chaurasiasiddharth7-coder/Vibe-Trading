@@ -89,7 +89,8 @@ def test_runner_injects_requested_fundamental_panel(monkeypatch: pytest.MonkeyPa
     assert captured["freq"] == "ttm"
     assert captured["pit"] is True
     assert captured["source"] == "auto"
-    assert captured["index"] is index
+    # pandas 3 (copy-on-write) may pass an equal copy of the index: compare values, not identity
+    assert captured["index"].equals(index)
     pd.testing.assert_frame_equal(
         panel["fund:roe"],
         pd.DataFrame({"AAPL.US": [0.1, 0.2, 0.3]}, index=index),
@@ -167,7 +168,8 @@ def test_runner_selected_fund_factor_projects_panel_back_to_data_map(
     )
 
     assert captured["fields"] == ["roe"]
-    assert captured["index"] is index
+    # pandas 3 (copy-on-write) may pass an equal copy of the index: compare values, not identity
+    assert captured["index"].equals(index)
     assert result is not data_map
     assert result["AAPL.US"]["fund:roe"].tolist() == [0.4, 0.5]
 

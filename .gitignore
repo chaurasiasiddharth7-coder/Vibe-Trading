@@ -99,3 +99,7 @@ agent/.swarm/
 third_party/Kronos/
 Vibe-Trading.code-workspace
 frontend/frontend.log
+
+# local run outputs (Kite check, guard test script)
+kite_check_result.txt
+profit_guard_test_result.txt

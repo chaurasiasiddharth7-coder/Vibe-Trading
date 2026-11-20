@@ -287,6 +287,8 @@ register_btst_routes(app, require_auth)
 # --- Auth helpers (SSE tickets) ---
 from src.api.auth_routes import register_auth_routes  # noqa: E402
 register_auth_routes(app)
+from src.api.desk_pages_routes import register_desk_pages_routes  # noqa: E402
+register_desk_pages_routes(app, require_auth)  # users, Portfolio/F&O/Wealth/Suggestions, Strategies
 
 
 # ============================================================================

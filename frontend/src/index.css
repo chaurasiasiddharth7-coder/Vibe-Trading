@@ -99,3 +99,12 @@
 
 /* RTL: mirror directional icons (chevrons, arrows) automatically */
 [dir="rtl"] .rtl\:flip-x { transform: scaleX(-1); }
+
+/* Privacy mode (My layout): blur every number so the screen can be shared. Numbers use font-mono throughout. */
+[data-privacy="on"] main .font-mono {
+  filter: blur(6px);
+  user-select: none;
+}
+@media print {
+  [data-privacy="on"] main .font-mono { filter: none; visibility: hidden; }
+}
