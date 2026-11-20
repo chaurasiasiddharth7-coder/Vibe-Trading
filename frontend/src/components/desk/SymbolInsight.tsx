@@ -33,8 +33,14 @@ export interface InsightProps {
   entryScore?: TradeScore | null;
   compact?: boolean;
   chartHeight?: number;
+  /** How much history to load (more history = more to zoom out to). */
+  period?: "6mo" | "1y" | "2y";
+  /** Reload prices in the background this often (live Kite candle on the owner's desk). */
+  refreshMs?: number;
   children?: ReactNode;
 }
+
+const PERIOD_LABEL = { "6mo": "6-month", "1y": "1-year", "2y": "2-year" } as const;
 
 /** Key numbers, chart with levels and volume, full analysis, and an on-demand AI forecast for one stock. */
 export function SymbolInsight({
@@ -52,6 +58,8 @@ export function SymbolInsight({
   entryScore = null,
   compact = false,
   chartHeight = 320,
+  period = "6mo",
+  refreshMs,
   children,
 }: InsightProps) {
   const [data, setData] = useState<AnalysisPayload | null>(null);
@@ -67,13 +75,21 @@ export function SymbolInsight({
     setData(null);
     setFailed(false);
     api
-      .getAlphadeskAnalysis(symbol)
+      .getAlphadeskAnalysis(symbol, period)
       .then((r) => alive && setData(r.data))
       .catch(() => alive && setFailed(true));
+    // Live: refresh quietly; keep the old chart (and your zoom) if a refresh fails.
+    const t = refreshMs
+      ? window.setInterval(() => {
+          if (document.visibilityState !== "visible") return;
+          api.getAlphadeskAnalysis(symbol, period).then((r) => alive && setData(r.data)).catch(() => undefined);
+        }, refreshMs)
+      : undefined;
     return () => {
       alive = false;
+      window.clearInterval(t);
     };
-  }, [symbol]);
+  }, [symbol, period, refreshMs]);
 
   const runForecast = useCallback(() => {
     setFc((p) => ({ ...p, state: "loading", error: null }));
@@ -114,7 +130,7 @@ export function SymbolInsight({
   const stats: Array<[string, string]> = [
     ["Price", inr(price)],
     ["Today", data ? `${data.change_percent >= 0 ? "+" : "−"}${Math.abs(data.change_percent).toFixed(2)}%` : "—"],
-    ["6-month range", hi != null && lo != null ? `${inr(lo, 0)} – ${inr(hi, 0)}` : "—"],
+    [`${PERIOD_LABEL[period]} range`, hi != null && lo != null ? `${inr(lo, 0)} – ${inr(hi, 0)}` : "—"],
     ["Usual daily move", atr != null && price ? `${((atr / price) * 100).toFixed(1)}%` : "—"],
     ["Momentum (RSI)", rsi != null ? rsi.toFixed(0) : "—"],
   ];

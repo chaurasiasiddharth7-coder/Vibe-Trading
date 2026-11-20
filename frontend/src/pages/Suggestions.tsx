@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { StockLink } from "@/components/desk/StockSheet";
 import { desk, rupees, ASSET_LABEL, type Suggestion } from "@/lib/deskApi";
 import { useSession } from "@/lib/session";
 import { Chip, Empty, Note, Page, PageHeader, Tiles } from "@/components/shell/ui";
@@ -75,7 +76,7 @@ export function Suggestions() {
           {shown.slice(0, limit).map((c) => (
             <li key={c.id} className="rounded-md border border-border p-3 space-y-1.5">
               <div className="flex items-center gap-2">
-                <span className="font-semibold">{c.symbol}</span>
+                {c.asset_type === "mf" ? <span className="font-semibold">{c.symbol}</span> : <StockLink symbol={c.symbol} className="font-semibold" />}
                 <span className={cn("text-xs rounded border px-1.5 py-0.5", ACTION[c.action].cls)}>{ACTION[c.action].label}</span>
                 <span className="text-xs text-muted-foreground">{ASSET_LABEL[c.asset_type] ?? c.asset_type} · {c.strategy}</span>
               </div>

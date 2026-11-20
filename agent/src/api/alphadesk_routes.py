@@ -76,22 +76,19 @@ def register_alphadesk_routes(
         bypass_cache: bool = Query(False),
     ) -> dict[str, Any]:
         """Structured TA + candlestick payload for an NSE/BSE symbol."""
-        from src.alphadesk.cache import PRICE_MAX_AGE_S, get_cached, set_cached
+        from src.alphadesk.cache import get_cached, set_cached
+        from src.alphadesk.signal_board import analysis_cache
 
         try:
             normalize_india_symbol(symbol)
+            # Live Kite numbers (owner only) get their own one-minute entry, never shared with other profiles.
+            params, max_age = analysis_cache({"interval": interval, "period": period})
             if not bypass_cache:
-                cached = get_cached(
-                    "analysis",
-                    symbol,
-                    max_age_s=PRICE_MAX_AGE_S,
-                    interval=interval,
-                    period=period,
-                )
+                cached = get_cached("analysis", symbol, max_age_s=max_age, **params)
                 if cached is not None:
                     return {"ok": True, "data": cached, "cached": True}
             payload = analyze_symbol(symbol, period=period, interval=interval)
-            set_cached("analysis", symbol, payload, interval=interval, period=period)
+            set_cached("analysis", symbol, payload, **params)
             return {"ok": True, "data": payload, "cached": False}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -119,13 +116,15 @@ def register_alphadesk_routes(
 
         try:
             from src.alphadesk.kronos_service import forecast_symbol
+            from src.alphadesk.signal_board import analysis_cache
 
-            params = {
+            # A forecast made with Kite's live bar is the owner's alone: its own cache entry.
+            params, _ = analysis_cache({
                 "lookback": lookback,
                 "pred_len": pred_len,
                 "interval": interval,
                 "period": period,
-            }
+            })
             if not bypass_cache:
                 cached = get_cached("kronos", symbol, **params)
                 if cached is not None:

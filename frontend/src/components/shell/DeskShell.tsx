@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { setThemeMode } from "@/hooks/useDarkMode";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { IndexStrip } from "@/components/shell/IndexStrip";
+import { StockSheetProvider } from "@/components/desk/StockSheet";
 import { SessionProvider, menuPages, pageForPath, useSession, APP_PAGES } from "@/lib/session";
 import { desk } from "@/lib/deskApi";
 import { setApiAuthKey } from "@/lib/apiAuth";
@@ -24,7 +25,11 @@ function ShellBody() {
   if (state === "loading") return <div className="h-screen grid place-items-center text-sm text-muted-foreground">Loading…</div>;
   if (state === "signed_out") return <Login onDone={() => void refresh()} />;
   if (state === "must_change") return <ChangePassword forced onDone={() => void refresh()} />;
-  return <Frame />;
+  return (
+    <StockSheetProvider>
+      <Frame />
+    </StockSheetProvider>
+  );
 }
 
 function Frame() {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { StockLink } from "@/components/desk/StockSheet";
 import { Trash2 } from "lucide-react";
 import { desk, rupees, tone, ASSET_LABEL, type GroupsData, type Holding } from "@/lib/deskApi";
 import { useSession } from "@/lib/session";
@@ -153,7 +154,7 @@ export function Portfolio() {
               {shown.map((h) => (
                 <tr key={h.id}>
                   <td className="px-3 py-2">
-                    <div className="font-medium">{h.symbol}</div>
+                    <div className="font-medium">{h.asset_type === "mf" || h.asset_type === "fno" ? h.symbol : <StockLink symbol={h.symbol} />}</div>
                     <div className="text-xs text-muted-foreground">
                       {ASSET_LABEL[h.asset_type]} · {h.source === "paper" ? `practice ${h.side === "SHORT" ? "short" : "buy"}` : "Zerodha"}
                     </div>

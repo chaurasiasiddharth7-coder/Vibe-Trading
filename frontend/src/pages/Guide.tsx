@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { StockLink } from "@/components/desk/StockSheet";
 import { useSearchParams } from "react-router-dom";
 import { ChevronDown, Compass, Loader2, Minus, Plus } from "lucide-react";
 import {
@@ -322,7 +323,7 @@ function IdeaCard({
     <article className="rounded-lg border border-border p-4 space-y-3 flex flex-col">
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="text-base font-semibold">{row.symbol}</h3>
+          <h3 className="text-base font-semibold"><StockLink symbol={row.symbol} /></h3>
           {(row.name && row.name !== row.symbol) || row.industry ? (
             <p className="text-xs text-muted-foreground">
               {row.name && row.name !== row.symbol ? row.name : ""}
@@ -1171,7 +1172,7 @@ export function Guide({
                 <ul className="text-sm space-y-1">
                   {closestToBuy(board.rows ?? []).map((r) => (
                     <li key={r.symbol}>
-                      <span className="font-semibold">{r.symbol}</span>{" "}
+                      <StockLink symbol={r.symbol} className="font-semibold" />{" "}
                       <span className="font-mono text-muted-foreground">{inr(r.price)}</span>: {missingForBuy(r)}
                     </li>
                   ))}
