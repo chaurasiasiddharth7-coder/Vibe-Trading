@@ -4,6 +4,7 @@ import { normalizePrefs, type DeskMe, type DeskPrefs } from "@/lib/deskPrefs";
 
 /** Every page of the Kite-style app, in the default menu order. `id` matches the server's page names. */
 export const APP_PAGES = [
+  { id: "watchlist", to: "/watchlist", label: "Watchlist" },
   { id: "stocks", to: "/dashboard", label: "Stocks" },
   { id: "intraday", to: "/intraday", label: "Intraday" },
   { id: "btst", to: "/btst", label: "Overnight" },
@@ -87,7 +88,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [prefs],
   );
 
-  const allowed = me?.pages ?? (me?.is_owner ? APP_PAGES.map((p) => p.id) : APP_PAGES.map((p) => p.id).filter((p) => p !== "users"));
+  // The watchlist is everyone's home screen (own lists; Kite prices for the owner only), whatever pages they were given.
+  const allowed = useMemo(() => {
+    const base = me?.pages ?? (me?.is_owner ? APP_PAGES.map((p) => p.id) : APP_PAGES.map((p) => p.id).filter((p) => p !== "users"));
+    return base.includes("watchlist") ? base : ["watchlist", ...base];
+  }, [me]);
   const value = useMemo(() => ({ state, me, prefs, allowed, refresh, savePrefs }), [state, me, prefs, allowed, refresh, savePrefs]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

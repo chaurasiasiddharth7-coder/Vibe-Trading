@@ -76,6 +76,28 @@ def save_token(session_data: dict[str, Any], now_ms: int, path: Path | None = No
     return record
 
 
+def import_token(text: str, path: Path | None = None, now_ms: int | None = None) -> int:
+    """Save a session sent from the Mac's morning login (``export`` there, piped over ssh). Read-only data use."""
+    now_ms = _now_ms() if now_ms is None else now_ms
+    try:
+        rec = json.loads(text)
+    except ValueError:
+        print("import: not JSON", file=sys.stderr)
+        return 2
+    if not isinstance(rec, dict) or not token_is_fresh(rec, now_ms):
+        print("import: the session is missing or expired", file=sys.stderr)
+        return 1
+    keep = {k: rec[k] for k in ("access_token", "user_id", "created_at_ms", "expires_at_ms", "api_key") if rec.get(k)}
+    p = path or token_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(keep), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    tmp.replace(p)
+    print(f"Server has today's Kite session for {keep.get('user_id')}.")
+    return 0
+
+
 def parse_request_token(text: str) -> str:
     """Accept either the bare request_token or the whole redirected URL."""
     text = text.strip()
@@ -142,7 +164,19 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "status":
         print(json.dumps(status(_now_ms()), indent=2))
         return 0
-    print("commands: url | exchange <url-or-token> | status")
+    if cmd == "export":
+        # Today's session for the desk server (stdout is piped straight into ssh, never shown). No secret, no password.
+        rec = load_token() or {}
+        if not token_is_fresh(rec, _now_ms()):
+            print("no fresh Kite login to send", file=sys.stderr)
+            return 1
+        rec = {k: rec[k] for k in ("access_token", "user_id", "created_at_ms", "expires_at_ms") if k in rec}
+        rec["api_key"] = os.environ.get("KITE_API_KEY", "").strip()
+        sys.stdout.write(json.dumps(rec))
+        return 0
+    if cmd == "import":
+        return import_token(sys.stdin.read())
+    print("commands: url | exchange <url-or-token> | status | export | import")
     return 2
 
 

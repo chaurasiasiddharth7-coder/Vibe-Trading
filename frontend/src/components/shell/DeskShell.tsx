@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, ChevronDown, EyeOff, Eye, LogOut, Moon, Sun, SlidersHorizontal, KeyRound, Users } from "lucide-react";
+import { BarChart3, ChevronDown, EyeOff, Eye, LogOut, Settings, Sun, SlidersHorizontal, KeyRound, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useDarkMode } from "@/hooks/useDarkMode";
+import { setThemeMode } from "@/hooks/useDarkMode";
+import { BottomNav } from "@/components/shell/BottomNav";
+import { IndexStrip } from "@/components/shell/IndexStrip";
 import { SessionProvider, menuPages, pageForPath, useSession, APP_PAGES } from "@/lib/session";
 import { desk } from "@/lib/deskApi";
 import { setApiAuthKey } from "@/lib/apiAuth";
@@ -29,7 +31,6 @@ function Frame() {
   const { me, prefs, allowed, state, savePrefs, refresh } = useSession();
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { dark, toggle } = useDarkMode();
   const [open, setOpen] = useState(false);
   const [changing, setChanging] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -37,6 +38,11 @@ function Frame() {
   const current = pageForPath(pathname);
   const noAccess = current !== null && !allowed.includes(current);
   const password = me?.signed_in_with === "password";
+
+  // The theme you picked in Settings follows you to every device you sign in on.
+  useEffect(() => {
+    if (state === "ready") setThemeMode(prefs.theme);
+  }, [state, prefs.theme]);
 
   useEffect(() => {
     if (!open) return;
@@ -65,8 +71,9 @@ function Frame() {
 
   return (
     <div className="min-h-screen bg-background" data-privacy={prefs.privacy_mode ? "on" : "off"}>
-      <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
-        <div className="flex items-center gap-2 px-3 sm:px-4 h-12">
+      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur pt-[env(safe-area-inset-top)] md:border-b md:border-border md:bg-card/95">
+        <IndexStrip className="md:hidden" />
+        <div className="hidden md:flex items-center gap-2 px-3 sm:px-4 h-12">
           <Link to="/" className="flex items-center gap-2 font-semibold shrink-0 me-2">
             <BarChart3 className="h-5 w-5 text-primary" aria-hidden />
             <span className="hidden sm:inline">Vibe Desk</span>
@@ -109,7 +116,7 @@ function Frame() {
                 <MenuItem icon={prefs.privacy_mode ? Eye : EyeOff} onClick={() => void savePrefs({ privacy_mode: !prefs.privacy_mode })}>
                   {prefs.privacy_mode ? "Show amounts" : "Hide amounts (privacy)"}
                 </MenuItem>
-                <MenuItem icon={dark ? Sun : Moon} onClick={toggle}>{dark ? "Light mode" : "Dark mode"}</MenuItem>
+                <MenuItem icon={Settings} onClick={() => { setOpen(false); navigate("/account"); }}>Settings (theme, dark mode)</MenuItem>
                 {allowed.includes("users") && (
                   <MenuItem icon={Users} onClick={() => { setOpen(false); navigate("/users"); }}>Users</MenuItem>
                 )}
@@ -126,6 +133,7 @@ function Frame() {
             )}
           </div>
         </div>
+        <IndexStrip className="hidden md:grid max-w-md border-t border-border" />
       </header>
       {state === "offline" && (
         <p className="px-4 py-2 text-sm bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
@@ -143,6 +151,7 @@ function Frame() {
       ) : (
         <Outlet />
       )}
+      <BottomNav allowed={allowed} current={pathname.startsWith("/account") ? "account" : current} accountLabel={me?.username ?? "Account"} />
     </div>
   );
 }

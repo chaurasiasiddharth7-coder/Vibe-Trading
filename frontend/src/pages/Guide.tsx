@@ -601,7 +601,26 @@ export function Guide({
           }
         }
         const start = () => api.postBoardScan({ universe: prefs.universe, include_funds: prefs.includeFunds });
-        const watch = (id: string) => pollJob<SignalBoard>(id, (p) => alive() && setProgress(p), alive);
+        let shownPartial = false;
+        const onProgress = (p: Progress) => {
+          if (!alive()) return;
+          setProgress(p);
+          // Pass 1 (prices) is done: show those ideas now; the AI forecast fills in when pass 2 ends.
+          if (p?.phase === "forecast" && !shownPartial) {
+            shownPartial = true;
+            void api
+              .getBoardLast(prefs.universe)
+              .then((last) => {
+                const b = last?.data;
+                if (b && alive()) {
+                  setBoard(b);
+                  setTrack(b.track_record);
+                }
+              })
+              .catch(() => {});
+          }
+        };
+        const watch = (id: string) => pollJob<SignalBoard>(id, onProgress, alive);
         let result: SignalBoard | null;
         try {
           result = await watch((await start()).job_id);
@@ -1049,9 +1068,11 @@ export function Guide({
         {loading && (
           <div className="space-y-1" aria-live="polite">
             <p className="text-xs text-muted-foreground">
-              {progress?.total
-                ? `Checked ${progress.done} of ${progress.total} stocks…`
-                : "Starting the check…"}{" "}
+              {progress?.phase === "forecast"
+                ? `Ideas ready from prices. Adding the AI forecast: ${progress.done} of ${progress.total}…`
+                : progress?.total
+                  ? `Checked ${progress.done} of ${progress.total} stocks…`
+                  : "Starting the check…"}{" "}
               You can keep using the page while this runs.
             </p>
             <div className="h-1.5 rounded bg-muted overflow-hidden">
@@ -1064,7 +1085,10 @@ export function Guide({
         )}
         {board && (
           <p className="text-xs text-muted-foreground">
-            {board.scanned} stocks checked · prices as of {board.as_of ?? "—"}.
+            {board.scanned} stocks checked ·{" "}
+            {board.live
+              ? `live prices from Kite at ${new Date(board.live.at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}.`
+              : `prices as of ${board.as_of ?? "—"}.`}
             {(board.stale?.length ?? 0) > 0 &&
               ` ${board.stale.length} may be out of date (could be a holiday or a data gap).`}
             {board.failed.length > 0 && ` ${board.failed.length} couldn't be loaded and were skipped.`}

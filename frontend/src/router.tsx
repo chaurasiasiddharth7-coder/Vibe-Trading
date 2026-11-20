@@ -37,6 +37,8 @@ const Wealth = lazy(() => import("@/pages/Wealth").then((m) => ({ default: m.Wea
 const Suggestions = lazy(() => import("@/pages/Suggestions").then((m) => ({ default: m.Suggestions })));
 const Strategies = lazy(() => import("@/pages/Strategies").then((m) => ({ default: m.Strategies })));
 const UsersPage = lazy(() => import("@/pages/Users").then((m) => ({ default: m.UsersPage })));
+const Watchlist = lazy(() => import("@/pages/Watchlist").then((m) => ({ default: m.Watchlist })));
+const Account = lazy(() => import("@/pages/Account").then((m) => ({ default: m.Account })));
 const MyLayout = lazy(() => import("@/pages/MyLayout").then((m) => ({ default: m.MyLayout })));
 
 function PageLoader() {
@@ -98,6 +100,8 @@ function RouteError() {
 }
 
 const dashboardRoutes = [
+  { path: "/watchlist", element: wrap(Watchlist) },
+  { path: "/account", element: wrap(Account) },
   { path: "/dashboard", element: wrap(Dashboard) },
   { path: "/intraday", element: wrap(Intraday) },
   { path: "/btst", element: wrap(Btst) },

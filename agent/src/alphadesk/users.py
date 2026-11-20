@@ -564,7 +564,9 @@ _PAGE_ROUTES: tuple[tuple[str, str], ...] = (
     ("/api/desk/strategies", "strategies"),
 )
 # Reachable by every signed-in user whatever their pages: sign-in, who-am-I, their own layout, guard health.
-_ALWAYS = ("/api/desk/auth/", "/api/desk/me", "/api/desk/guard/status", "/api/desk/universes")
+# The watchlist home screen is everyone's: each person's own lists, and only the owner gets Kite prices.
+_ALWAYS = ("/api/desk/auth/", "/api/desk/me", "/api/desk/guard/status", "/api/desk/universes",
+           "/api/desk/watchlists", "/api/desk/quotes", "/api/desk/symbols")
 # Before the one-time password is replaced, only these: sign-in actions and who-am-I.
 _BEFORE_CHANGE = ("/api/desk/auth/", "/api/desk/me")  # documented; checked inline in route_allowed
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}

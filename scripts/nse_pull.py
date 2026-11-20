@@ -41,9 +41,10 @@ EQUITY_SERIES = {"EQ": 0, "BE": 1, "BZ": 2, "BL": 3, "BT": 3, "IL": 3, "IQ": 3}
 # Known weekend special sessions (Budget Saturdays, Muhurat Saturdays/Sundays). A 404 is harmless.
 SPECIAL_SESSIONS = [date(2015, 2, 28), date(2016, 10, 30), date(2019, 10, 27), date(2020, 2, 1),
                     date(2020, 11, 14), date(2023, 11, 12), date(2025, 2, 1)]
-INDEX_NAMES = {"NIFTY 50", "NIFTY 500", "INDIA VIX"}
+INDEX_NAMES = {"NIFTY 50", "NIFTY 500", "INDIA VIX", "NIFTY BANK"}
 INDEX_ALIASES = {"CNX NIFTY": "NIFTY 50", "S&P CNX NIFTY": "NIFTY 50", "CNX 500": "NIFTY 500",
-                 "S&P CNX 500": "NIFTY 500"}
+                 "S&P CNX 500": "NIFTY 500", "CNX BANK": "NIFTY BANK",
+                 "CNX BANK INDEX": "NIFTY BANK", "BANK NIFTY": "NIFTY BANK"}
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
                   "Chrome/126.0.0.0 Safari/537.36",

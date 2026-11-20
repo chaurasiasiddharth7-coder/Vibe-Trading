@@ -5,7 +5,7 @@ import { APP_PAGES, useSession } from "@/lib/session";
 import { Page, PageHeader, Tiles, Note, Empty } from "@/components/shell/ui";
 import { cn } from "@/lib/utils";
 
-const GRANTABLE = APP_PAGES.filter((p) => p.id !== "users");
+const GRANTABLE = APP_PAGES.filter((p) => p.id !== "users" && p.id !== "watchlist"); // everyone has the watchlist
 const field = "w-full min-h-11 rounded-md border border-border bg-background px-3 text-sm";
 const when = (ts: number | null) =>
   ts ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date(ts * 1000)) : "Never";

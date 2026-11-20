@@ -201,7 +201,7 @@ def default_prefs() -> dict[str, Any]:
     return {"version": 1, "layout": "tabs", "density": "comfortable", "tile_style": "cards",
             "tiles": None, "hidden_tabs": [], "hidden_filters": [], "hidden_rows": [],
             # App-wide layout (Kite-style shell): which pages show in the top menu, in what order, where to land.
-            "pages_order": [], "hidden_pages": [], "landing_page": "stocks", "privacy_mode": False,
+            "pages_order": [], "hidden_pages": [], "landing_page": "watchlist", "privacy_mode": False,
             "theme": "system", "tiles_by_page": {}}
 
 

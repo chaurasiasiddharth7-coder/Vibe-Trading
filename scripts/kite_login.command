@@ -24,4 +24,13 @@ echo
 echo "== Checking live prices (15 seconds) =="
 PYTHONDONTWRITEBYTECODE=1 $PY -m src.live.profit_guard.feeds.check_live
 echo
+HOST_FILE="$(dirname "$0")/.deploy_host"
+if [ -s "$HOST_FILE" ]; then
+  echo "== Sending today's Kite session to your desk server (live prices on the dashboard) =="
+  DEPLOY_HOST=$(head -1 "$HOST_FILE"); DEPLOY_DIR="${DEPLOY_DIR:-/opt/vibe-trading}"
+  $PY -m src.live.profit_guard.feeds.kite_auth export | ssh -o BatchMode=yes -o ConnectTimeout=10 "$DEPLOY_HOST" \
+    "cd $DEPLOY_DIR/deploy/alphadesk && docker compose exec -T alphadesk-api python -m src.live.profit_guard.feeds.kite_auth import" \
+    || echo "Could not reach the server; the dashboard shows end-of-day prices until the next login."
+fi
+echo
 echo "Done. You can close this window."

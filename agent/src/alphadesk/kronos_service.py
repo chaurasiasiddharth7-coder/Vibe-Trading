@@ -49,6 +49,28 @@ def _locked_predict(predictor: Any, **kwargs: Any) -> Any:
         return predictor.predict(**kwargs)
 
 
+def cpu_threads() -> int:
+    """Threads for CPU inference: KRONOS_THREADS, else the container's CPU quota (cgroup), else the core count."""
+    import math
+    import os
+
+    env = os.environ.get("KRONOS_THREADS", "").strip()
+    if env.isdigit() and int(env) > 0:
+        return int(env)
+    for path, parse in (("/sys/fs/cgroup/cpu.max", lambda t: t.split()),  # cgroup v2: "150000 100000"
+                        ("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", lambda t: [t.strip(), None])):  # v1
+        try:
+            parts = parse(open(path).read())
+            if path.endswith("cpu.max") and parts[0] != "max":
+                return max(1, math.floor(int(parts[0]) / int(parts[1])))
+            if parts[1] is None and int(parts[0]) > 0:
+                period = int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read().strip())
+                return max(1, math.floor(int(parts[0]) / period))
+        except (OSError, ValueError, IndexError, ZeroDivisionError):
+            continue
+    return max(1, os.cpu_count() or 1)
+
+
 def get_predictor() -> Any:
     """Lazy-load KronosPredictor once per process (thread-safe)."""
     global _PREDICTOR, _LOAD_ERROR
@@ -64,6 +86,10 @@ def get_predictor() -> Any:
             from model import Kronos, KronosPredictor, KronosTokenizer  # type: ignore
 
             device = "cuda" if torch.cuda.is_available() else "cpu"
+            if device == "cpu":
+                # torch starts one thread per HOST core; under a container CPU cap (cpus: 1.5) they fight for
+                # the quota and every forecast slows down a lot. Use only the CPUs we may really use.
+                torch.set_num_threads(cpu_threads())
             logger.info("Loading Kronos (%s) on %s …", DEFAULT_MODEL_ID, device)
             tokenizer = KronosTokenizer.from_pretrained(DEFAULT_TOKENIZER_ID)
             model = Kronos.from_pretrained(DEFAULT_MODEL_ID)
