@@ -37,7 +37,7 @@ async function errorFromResponse(res: Response): Promise<ApiError> {
   return new ApiError(detail, res.status);
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+export async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const { headers, ...rest } = options ?? {};
   const mergedHeaders: Record<string, string> = { "Content-Type": "application/json", ...authHeaders() };
   if (headers) {
@@ -306,6 +306,21 @@ export const api = {
     }),
   intradaySchedule: () =>
     request<{ ok: boolean; data: import("@/lib/intraday").ScheduleStatus }>("/api/desk/intraday/schedule"),
+  btstToday: () =>
+    request<{ ok: boolean; data: import("@/lib/btst").BtstRecord | null; schedule: import("@/lib/btst").BtstSchedule; job: import("@/lib/btst").BtstJob | null; store_last: string | null }>(
+      "/api/desk/btst/today",
+    ),
+  btstDay: (date: string, kind: "live" | "replay" = "live") =>
+    request<{ ok: boolean; data: import("@/lib/btst").BtstRecord | null }>(`/api/desk/btst/day/${encodeURIComponent(date)}?kind=${kind}`),
+  btstDays: (kind: "live" | "replay" = "live", limit = 120) =>
+    request<{ ok: boolean; data: import("@/lib/btst").BtstDayRow[] }>(`/api/desk/btst/days?kind=${kind}&limit=${limit}`),
+  btstStats: () =>
+    request<{ ok: boolean; data: { live: import("@/lib/btst").BtstStats; replay: import("@/lib/btst").BtstStats } }>("/api/desk/btst/stats"),
+  btstJob: () => request<{ ok: boolean; data: import("@/lib/btst").BtstJob | null }>("/api/desk/btst/job"),
+  btstScan: () => request<{ ok: boolean; started: string }>("/api/desk/btst/scan", { method: "POST" }),
+  btstSettle: (date: string) =>
+    request<{ ok: boolean; data: import("@/lib/btst").BtstRecord }>(`/api/desk/btst/settle?day=${encodeURIComponent(date)}`, { method: "POST" }),
+  btstReplay: (years = 3) => request<{ ok: boolean; started: string; from: string; to: string }>(`/api/desk/btst/replay?years=${years}`, { method: "POST" }),
   getAlphadeskAnalysis: (symbol: string, period = "6mo", interval = "1d") =>
     request<{ ok: boolean; data: AnalysisPayload }>(
       `/api/analysis/${encodeURIComponent(symbol)}?period=${encodeURIComponent(period)}&interval=${encodeURIComponent(interval)}`,

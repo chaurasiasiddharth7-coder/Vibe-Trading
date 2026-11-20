@@ -41,14 +41,23 @@ def register_alphadesk_routes(
         """Who is signed in and how they want the dashboard laid out."""
         from src.alphadesk import profiles
 
+        from src.alphadesk import users
+
         pid = profiles.current_id()
         info = profiles.get(pid) if pid else None
+        user = users.current_user()
+        role = user.role if user else ("owner" if pid is None else "trader")
         return {
             "ok": True,
             "data": {
                 "id": pid,
-                "name": (info or {}).get("name") or "Owner",
+                "name": (user.name if user else None) or (info or {}).get("name") or "Owner",
                 "is_owner": pid is None,
+                "role": role,
+                "username": user.username if user else None,
+                "signed_in_with": "password" if user else "key",
+                "must_change": bool(user and user.must_change),
+                "pages": user.allowed_pages() if user else list(users.OWNER_PAGES if pid is None else users.PAGES),
                 "prefs": profiles.load_prefs(),
             },
         }

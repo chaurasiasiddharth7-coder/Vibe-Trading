@@ -2,6 +2,8 @@ import { Suspense, lazy, useEffect, type ComponentType } from "react";
 import { Navigate, createBrowserRouter, useRouteError } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { DASHBOARD_ONLY } from "@/lib/hosted";
+import { DeskShell, Landing } from "@/components/shell/DeskShell";
+import { SessionProvider } from "@/lib/session";
 
 const Home = lazy(() => import("@/pages/Home").then((m) => ({ default: m.Home })));
 const Agent = lazy(() => import("@/pages/Agent").then((m) => ({ default: m.Agent })));
@@ -28,6 +30,14 @@ const AlphaZoo = lazy(() =>
 );
 const Dashboard = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const Intraday = lazy(() => import("@/pages/Intraday").then((m) => ({ default: m.Intraday })));
+const Btst = lazy(() => import("@/pages/Btst").then((m) => ({ default: m.Btst })));
+const Portfolio = lazy(() => import("@/pages/Portfolio").then((m) => ({ default: m.Portfolio })));
+const Fno = lazy(() => import("@/pages/Fno").then((m) => ({ default: m.Fno })));
+const Wealth = lazy(() => import("@/pages/Wealth").then((m) => ({ default: m.Wealth })));
+const Suggestions = lazy(() => import("@/pages/Suggestions").then((m) => ({ default: m.Suggestions })));
+const Strategies = lazy(() => import("@/pages/Strategies").then((m) => ({ default: m.Strategies })));
+const UsersPage = lazy(() => import("@/pages/Users").then((m) => ({ default: m.UsersPage })));
+const MyLayout = lazy(() => import("@/pages/MyLayout").then((m) => ({ default: m.MyLayout })));
 
 function PageLoader() {
   return (
@@ -45,7 +55,6 @@ function wrap(Component: ComponentType) {
   );
 }
 
-const toDashboard = <Navigate to="/dashboard" replace />;
 
 /**
  * A browser tab left open across a deploy still points at old script files that no longer exist.
@@ -91,13 +100,21 @@ function RouteError() {
 const dashboardRoutes = [
   { path: "/dashboard", element: wrap(Dashboard) },
   { path: "/intraday", element: wrap(Intraday) },
+  { path: "/btst", element: wrap(Btst) },
+  { path: "/portfolio", element: wrap(Portfolio) },
+  { path: "/fno", element: wrap(Fno) },
+  { path: "/wealth", element: wrap(Wealth) },
+  { path: "/suggestions", element: wrap(Suggestions) },
+  { path: "/strategies", element: wrap(Strategies) },
+  { path: "/users", element: wrap(UsersPage) },
+  { path: "/layout", element: wrap(MyLayout) },
   { path: "/guide", element: <Navigate to="/dashboard" replace /> },
   { path: "/desk", element: <Navigate to="/dashboard?tab=chart" replace /> },
 ];
 
 // The hosted build only has a backend for the dashboard, so every other address lands there.
 const appRoutes = DASHBOARD_ONLY
-  ? [{ path: "/", element: toDashboard }, ...dashboardRoutes, { path: "*", element: toDashboard }]
+  ? [{ path: "/", element: <Landing /> }, ...dashboardRoutes, { path: "*", element: <Landing /> }]
   : [
       { path: "/", element: wrap(Home) },
       { path: "/agent", element: wrap(Agent) },
@@ -116,7 +133,14 @@ const appRoutes = DASHBOARD_ONLY
 
 export const router = createBrowserRouter([
   {
-    element: <Layout />,
+    // Hosted: the Kite-style top-menu shell with password sign-in. Local: the full app's sidebar.
+    element: DASHBOARD_ONLY ? (
+      <DeskShell />
+    ) : (
+      <SessionProvider>
+        <Layout />
+      </SessionProvider>
+    ),
     errorElement: <RouteError />,
     children: appRoutes,
   },

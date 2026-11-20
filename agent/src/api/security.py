@@ -403,7 +403,10 @@ def _validate_api_auth(
 
     api_key = _configured_api_key()
     token = _auth_credential_from_header_or_query(cred, query_api_key, allow_query=allow_query)
+    _bind_desk_user_none()
     if token and _bind_desk_profile(token, request, owner_key=api_key):
+        return
+    if not token and _bind_desk_session(request):
         return
     if api_key:
         if not token or not hmac.compare_digest(token, api_key):
@@ -437,6 +440,34 @@ def _bind_desk_profile(token: str, request: Request, *, owner_key: str) -> bool:
     if not profiles.path_allowed(request.url.path):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This key cannot use that part of the app")
     profiles.bind(pid)
+    return True
+
+
+def _bind_desk_user_none() -> None:
+    from src.alphadesk import users
+
+    users.bind_user(None)
+
+
+def _bind_desk_session(request: Request) -> bool:
+    """A password sign-in (session cookie) opens only the desk routes that user's role and pages allow.
+
+    Returns True when a valid session is present (the request is then bound to that user's desk),
+    False when there is no usable session (the caller falls back to the key / loopback rules).
+    """
+    from src.alphadesk import profiles, users
+
+    raw = request.cookies.get(users.COOKIE)
+    if not raw:
+        return False
+    user = users.session_user(raw)
+    if user is None:
+        return False
+    ok, why = users.route_allowed(user, request.url.path, request.method)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=why)
+    users.bind_user(user)
+    profiles.bind(user.profile_id)
     return True
 
 

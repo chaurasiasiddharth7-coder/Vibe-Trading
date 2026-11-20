@@ -1,0 +1,87 @@
+# Profit Guard defaults. STARTING VALUES ONLY: every number here must earn its
+# place in the P7 backtest (walk-forward + holdout) before it trades real money.
+# Percentages are plain numbers: 1.5 means 1.5%.
+
+capital_inr: 1000000          # base for the % rules; set to your real trading capital
+
+layer1:                       # per-position stop / target / trail
+  atr_period: 14
+  stop_atr_k: 1.5             # initial stop = entry -/+ k * ATR (or swing level if tighter)
+  min_stop_atr: 0.5           # never tighter than 0.5 ATR (noise)
+  target_r: 2.0               # full target at +2R (null = no fixed target)
+  breakeven_at_r: 1.0         # move stop to entry + costs at +1R
+  cost_buffer_pct: 0.05       # breakeven = entry +/- 0.05% to cover costs
+  scale_out_at_r: 1.0         # book part of the position at +1R
+  scale_out_frac: 0.5         # 0 disables scale-out
+  trail: chandelier           # chandelier | percent | none
+  chandelier_atr_k: 3.0       # stop = highest - k * ATR (shorts: lowest + k * ATR)
+  trail_pct: 20.0             # used when trail = percent (options premium trail)
+  time_stop_bars: 6           # exit if after N strategy bars...
+  time_stop_min_r: 0.5        # ...the trade is still below +0.5R (0 bars disables)
+
+layer2:                       # portfolio MTM guard (the Reddit fix)
+  mode: tiered                # tiered | lock_fixed | lock_and_trail | off
+  scope: per_strategy         # per_strategy | account
+  loss_cap_pct: 1.5           # day MTM <= -1.5% of capital -> flatten + HALT
+  arm_pct: 0.5                # lock arms once peak MTM >= 0.5% of capital
+  tiers:                      # [peak_from_pct, peak_to_pct (null = no top), keep_pct_of_peak]
+    - [0.0, 1.0, 50]
+    - [1.0, 2.0, 65]
+    - [2.0, null, 75]
+  lock_fixed:                 # once peak >= at_pct, floor = lock_pct (never moves)
+    at_pct: 0.5
+    lock_pct: 0.25
+  lock_and_trail:             # once peak >= at_pct floor = lock_pct, then +raise_pct per +every_pct of peak
+    at_pct: 0.5
+    lock_pct: 0.25
+    every_pct: 0.25
+    raise_pct: 0.15
+  losing_days_halve_after: 3  # size halves after N losing days in a row, until a green day
+
+layer3:                       # time / session / events
+  no_new_entry: "14:45"
+  square_off: "15:15"
+  expiry_exit: "14:30"        # option positions on expiry day
+  weekly_expiry_weekday: null # 0=Mon .. 4=Fri; CHECK NSE's current weekly expiry day
+  event_flat_minutes: 15
+  btst_gap_exit_minutes: 5
+  use_gtt_for_btst: true
+
+executor:
+  max_orders_per_sec: 8       # Kite/SEBI cap is 10/sec; keep headroom
+  limit_through_ltp_pct: 0.75 # exit limit priced 0.75% through LTP (crosses the spread)
+  exit_alert_after_s: 30
+  exits_when_halted: true     # HALT blocks new risk; protective exits (stops, locks, square-off) still go out
+  tick_size: 0.05
+
+bridge:                       # hands the desk's strategies to the guard (paper): see bridge.py
+  enabled: true
+  btst: true                  # today's overnight pick, bought on paper after the 15:20 scan
+  signal_board: true          # open "Today's ideas" practice trades, mirrored once each
+  risk_per_trade_pct: 0.5     # a stop-out loses at most 0.5% of capital_inr...
+  max_position_pct: 20.0      # ...and no position is bigger than 20% of it
+  btst_backstop_target_pct: 5.0  # overnight GTT backstop only; the tiered lock manages the real exit
+
+strategies:                   # per-strategy overrides, merged over the sections above
+  btst:
+    layer1:
+      target_r: null          # BTST keeps its own +1% GTT target (set at entry)
+      scale_out_frac: 0.0
+      time_stop_bars: 0
+  intraday_opt_buy:
+    layer1:
+      trail: percent
+      trail_pct: 20.0
+      time_stop_bars: 6
+  swing:
+    layer1:
+      chandelier_atr_k: 3.0
+      time_stop_bars: 0
+  signal_board:               # practice trades handed over by the bridge: multi-day swing exits
+    layer1:
+      chandelier_atr_k: 3.0
+      time_stop_bars: 0
+  lab:                        # Strategies-page lab trades: same as the signal board
+    layer1:
+      chandelier_atr_k: 3.0
+      time_stop_bars: 0

@@ -73,9 +73,9 @@ export function ApiKeyGate({ onNeedsKey }: { onNeedsKey?: (needs: boolean) => vo
       <p className="text-sm text-muted-foreground">
         This dashboard talks to your private server, which needs your key. Paste it once. It stays in this browser only.
       </p>
-      {wrong && <p role="alert" className="text-sm text-rose-300">The saved key was not accepted. Paste the key again.</p>}
+      {wrong && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">The saved key was not accepted. Paste the key again.</p>}
       {clipError && (
-        <p role="alert" className="text-sm text-amber-300">
+        <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">
           Couldn't read the clipboard. Paste the key into the box instead.
         </p>
       )}

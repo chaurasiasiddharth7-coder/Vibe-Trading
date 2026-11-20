@@ -89,6 +89,15 @@ def run_job(kind: str, now: datetime | None = None, source: str = "scheduler") -
         else days.run_refresh(d, source, now)
 
 
+def _paper_on(strategy_id: str) -> bool:
+    try:
+        from src.alphadesk.strategies import paper_on
+
+        return paper_on(strategy_id)
+    except Exception:  # noqa: BLE001 - a broken switch file must not stop the bot
+        return True
+
+
 def tick(now: datetime | None = None, runner=run_job) -> list[str]:
     """Run whatever is owed. Returns the jobs attempted (``close`` for a past day is ``replay:DATE``)."""
     now = now or ibars.now_ist()
@@ -96,6 +105,13 @@ def tick(now: datetime | None = None, runner=run_job) -> list[str]:
     state = load_state()
     done = []
     for kind in due_jobs(now, state, settings):
+        if kind == "open" and not _paper_on("intraday"):
+            # Paper switch off on the Strategies page: no new day is planned; open days still settle.
+            state[kind] = {"date": now.date().isoformat(), "at": now.isoformat(timespec="seconds"), "ok": True,
+                           "note": "paper trading switched off on the Strategies page"}
+            save_state(state)
+            done.append("open:skipped")
+            continue
         try:
             runner(kind, now)
             ok, note = True, ""

@@ -28,8 +28,8 @@ export function VoteStrip({ votes }: { votes: BoardRow["votes"] }) {
             title={`${label}: ${v > 0 ? "points up" : v < 0 ? "points down" : "no opinion"}`}
             className={cn(
               "px-1 rounded border border-border",
-              v > 0 && "text-emerald-400",
-              v < 0 && "text-rose-400",
+              v > 0 && "text-emerald-600 dark:text-emerald-400",
+              v < 0 && "text-rose-600 dark:text-rose-400",
               v === 0 && "text-muted-foreground",
             )}
           >
@@ -97,8 +97,8 @@ function Row({
         </div>
         {row.entry != null ? (
           <div className="text-xs mt-1">
-            Exit at <span className="font-mono text-emerald-400">{inr(row.target, 0)}</span> if right,{" "}
-            <span className="font-mono text-rose-400">{inr(row.stop, 0)}</span> if wrong
+            Exit at <span className="font-mono text-emerald-600 dark:text-emerald-400">{inr(row.target, 0)}</span> if right,{" "}
+            <span className="font-mono text-rose-600 dark:text-rose-400">{inr(row.stop, 0)}</span> if wrong
           </div>
         ) : (
           <div className="text-xs mt-1 text-muted-foreground">{whatWeSee(row)[0]}</div>
@@ -106,16 +106,16 @@ function Row({
         {(row.side === "LONG" || row.side === "SHORT") && (
           <div
             className={cn(
-              "text-[11px] mt-0.5",
-              past.tone === "good" && "text-emerald-300",
-              past.tone === "bad" && "text-rose-300",
+              "text-xs mt-0.5",
+              past.tone === "good" && "text-emerald-700 dark:text-emerald-300",
+              past.tone === "bad" && "text-rose-700 dark:text-rose-300",
               (past.tone === "mixed" || past.tone === "unknown") && "text-muted-foreground",
             )}
           >
             {past.label}
           </div>
         )}
-        {row.stale && <div className="text-[11px] text-amber-300 mt-0.5">Price may be out of date</div>}
+        {row.stale && <div className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">Price may be out of date</div>}
       </button>
     </li>
   );
@@ -144,14 +144,14 @@ function Column({
         <h3
           className={cn(
             "text-sm font-semibold",
-            tone === "long" && "text-emerald-400",
-            tone === "short" && "text-rose-400",
+            tone === "long" && "text-emerald-600 dark:text-emerald-400",
+            tone === "short" && "text-rose-600 dark:text-rose-400",
             tone === "avoid" && "text-amber-400",
           )}
         >
           {title} <span className="font-mono text-muted-foreground">({rows.length})</span>
         </h3>
-        <p className="text-[11px] text-muted-foreground">{hint}</p>
+        <p className="text-xs text-muted-foreground">{hint}</p>
       </header>
       {rows.length === 0 ? (
         <p className="text-xs text-muted-foreground px-3 py-2">{empty}</p>
@@ -213,12 +213,12 @@ export function BoardColumns({
         />
       </div>
       {board.no_edge.length > 0 && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           No clear signal, skip for now: {board.no_edge.join(", ")}
         </p>
       )}
       {board.failed.length > 0 && (
-        <p className="text-[11px] text-rose-300">
+        <p className="text-xs text-rose-700 dark:text-rose-300">
           Couldn't load: {board.failed.map((f) => f.symbol).join(", ")}
         </p>
       )}
@@ -235,8 +235,8 @@ export function EvidencePanel({ row }: { row: BoardRow }) {
         <span
           className={cn(
             "font-semibold",
-            row.side === "LONG" && "text-emerald-400",
-            row.side === "SHORT" && "text-rose-400",
+            row.side === "LONG" && "text-emerald-600 dark:text-emerald-400",
+            row.side === "SHORT" && "text-rose-600 dark:text-rose-400",
             row.side === "STEER_CLEAR" && "text-amber-400",
           )}
         >
@@ -252,11 +252,11 @@ export function EvidencePanel({ row }: { row: BoardRow }) {
           </div>
           <div>
             <dt className="text-muted-foreground">Take profit</dt>
-            <dd className="font-mono text-emerald-400">{inr(row.target)}</dd>
+            <dd className="font-mono text-emerald-600 dark:text-emerald-400">{inr(row.target)}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Cut loss</dt>
-            <dd className="font-mono text-rose-400">{inr(row.stop)}</dd>
+            <dd className="font-mono text-rose-600 dark:text-rose-400">{inr(row.stop)}</dd>
           </div>
         </dl>
       )}
@@ -272,7 +272,7 @@ export function EvidencePanel({ row }: { row: BoardRow }) {
         </p>
       )}
       {row.stale && (
-        <p className="text-xs text-amber-300">
+        <p className="text-xs text-amber-700 dark:text-amber-300">
           Last price is from {row.as_of}, so it may be out of date. Check the live price first.
         </p>
       )}

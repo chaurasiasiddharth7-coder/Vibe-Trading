@@ -1,0 +1,792 @@
+{
+  "generated": "2026-11-20T02:30:06+05:30",
+  "trades": 538,
+  "from": "2023-11-20",
+  "to": "2026-11-17",
+  "worst_path": {
+    "A": {
+      "label": "Current: +1% target / -2% stop",
+      "n": 538,
+      "total_pct": -204.75,
+      "avg_pct": -0.381,
+      "win_rate": 55.6,
+      "worst_pct": -4.8,
+      "best_pct": 14.25,
+      "max_dd_pct": -206.16,
+      "capture": -8.3,
+      "exits": {
+        "STOP": 218,
+        "TARGET": 298,
+        "GAP": 15,
+        "CLOSE": 7
+      }
+    },
+    "B": {
+      "label": "Hold to close, no stop",
+      "n": 538,
+      "total_pct": -66.73,
+      "avg_pct": -0.124,
+      "win_rate": 41.1,
+      "worst_pct": -11.63,
+      "best_pct": 19.75,
+      "max_dd_pct": -212.6,
+      "capture": -10.5,
+      "exits": {
+        "CLOSE": 538
+      }
+    },
+    "C": {
+      "label": "Sell at the open",
+      "n": 538,
+      "total_pct": 140.4,
+      "avg_pct": 0.261,
+      "win_rate": 59.9,
+      "worst_pct": -4.7,
+      "best_pct": 14.25,
+      "max_dd_pct": -18.93,
+      "capture": 21.4,
+      "exits": {
+        "OPEN": 538
+      }
+    },
+    "D": {
+      "label": "Lock fixed (+0.25% once +0.5%)",
+      "n": 538,
+      "total_pct": -193.92,
+      "avg_pct": -0.36,
+      "win_rate": 9.3,
+      "worst_pct": -4.8,
+      "best_pct": 19.75,
+      "max_dd_pct": -211.18,
+      "capture": -9.6,
+      "exits": {
+        "STOP": 163,
+        "PROFIT_LOCK": 308,
+        "CLOSE": 52,
+        "GAP": 15
+      }
+    },
+    "E": {
+      "label": "Tiered keep of peak (live default)",
+      "n": 538,
+      "total_pct": 193.56,
+      "avg_pct": 0.36,
+      "win_rate": 59.5,
+      "worst_pct": -4.8,
+      "best_pct": 14.65,
+      "max_dd_pct": -28.96,
+      "capture": 9.7,
+      "exits": {
+        "STOP": 163,
+        "PROFIT_LOCK": 358,
+        "GAP": 15,
+        "CLOSE": 2
+      }
+    },
+    "F": {
+      "label": "Lock and trail",
+      "n": 538,
+      "total_pct": 40.89,
+      "avg_pct": 0.076,
+      "win_rate": 58.0,
+      "worst_pct": -4.8,
+      "best_pct": 11.45,
+      "max_dd_pct": -54.68,
+      "capture": 3.2,
+      "exits": {
+        "STOP": 163,
+        "PROFIT_LOCK": 358,
+        "GAP": 15,
+        "CLOSE": 2
+      }
+    },
+    "G": {
+      "label": "+2% target / -2% stop",
+      "n": 538,
+      "total_pct": -232.75,
+      "avg_pct": -0.433,
+      "win_rate": 44.2,
+      "worst_pct": -4.8,
+      "best_pct": 14.25,
+      "max_dd_pct": -233.68,
+      "capture": -16.9,
+      "exits": {
+        "STOP": 266,
+        "TARGET": 227,
+        "GAP": 15,
+        "CLOSE": 30
+      }
+    }
+  },
+  "best_path": {
+    "A": {
+      "label": "Current: +1% target / -2% stop",
+      "n": 538,
+      "total_pct": 179.65,
+      "avg_pct": 0.334,
+      "win_rate": 78.6,
+      "worst_pct": -4.8,
+      "best_pct": 14.25,
+      "max_dd_pct": -14.93,
+      "capture": 25.0,
+      "exits": {
+        "STOP": 94,
+        "TARGET": 422,
+        "GAP": 15,
+        "CLOSE": 7
+      }
+    },
+    "B": {
+      "label": "Hold to close, no stop",
+      "n": 538,
+      "total_pct": -66.73,
+      "avg_pct": -0.124,
+      "win_rate": 41.1,
+      "worst_pct": -11.63,
+      "best_pct": 19.75,
+      "max_dd_pct": -212.6,
+      "capture": -10.5,
+      "exits": {
+        "CLOSE": 538
+      }
+    },
+    "C": {
+      "label": "Sell at the open",
+      "n": 538,
+      "total_pct": 140.4,
+      "avg_pct": 0.261,
+      "win_rate": 59.9,
+      "worst_pct": -4.7,
+      "best_pct": 14.25,
+      "max_dd_pct": -18.93,
+      "capture": 21.4,
+      "exits": {
+        "OPEN": 538
+      }
+    },
+    "D": {
+      "label": "Lock fixed (+0.25% once +0.5%)",
+      "n": 538,
+      "total_pct": 40.08,
+      "avg_pct": 0.074,
+      "win_rate": 9.3,
+      "worst_pct": -4.8,
+      "best_pct": 19.75,
+      "max_dd_pct": -74.13,
+      "capture": 12.6,
+      "exits": {
+        "STOP": 59,
+        "PROFIT_LOCK": 412,
+        "CLOSE": 52,
+        "GAP": 15
+      }
+    },
+    "E": {
+      "label": "Tiered keep of peak (live default)",
+      "n": 538,
+      "total_pct": 1046.84,
+      "avg_pct": 1.946,
+      "win_rate": 83.3,
+      "worst_pct": -4.8,
+      "best_pct": 14.65,
+      "max_dd_pct": -15.36,
+      "capture": 64.0,
+      "exits": {
+        "STOP": 59,
+        "PROFIT_LOCK": 462,
+        "GAP": 15,
+        "CLOSE": 2
+      }
+    },
+    "F": {
+      "label": "Lock and trail",
+      "n": 538,
+      "total_pct": 727.14,
+      "avg_pct": 1.352,
+      "win_rate": 82.0,
+      "worst_pct": -4.8,
+      "best_pct": 11.6,
+      "max_dd_pct": -15.48,
+      "capture": 48.4,
+      "exits": {
+        "STOP": 59,
+        "PROFIT_LOCK": 462,
+        "GAP": 15,
+        "CLOSE": 2
+      }
+    },
+    "G": {
+      "label": "+2% target / -2% stop",
+      "n": 538,
+      "total_pct": 164.95,
+      "avg_pct": 0.307,
+      "win_rate": 62.3,
+      "worst_pct": -4.8,
+      "best_pct": 14.25,
+      "max_dd_pct": -21.57,
+      "capture": 8.0,
+      "exits": {
+        "STOP": 169,
+        "TARGET": 324,
+        "GAP": 15,
+        "CLOSE": 30
+      }
+    }
+  },
+  "first_half": {
+    "A": {
+      "label": "Current: +1% target / -2% stop",
+      "n": 269,
+      "total_pct": -99.74,
+      "avg_pct": -0.371,
+      "win_rate": 55.4,
+      "worst_pct": -4.58,
+      "best_pct": 14.25,
+      "max_dd_pct": -103.26,
+      "capture": -7.8,
+      "exits": {
+        "STOP": 108,
+        "TARGET": 149,
+        "GAP": 11,
+        "CLOSE": 1
+      }
+    },
+    "B": {
+      "label": "Hold to close, no stop",
+      "n": 269,
+      "total_pct": -71.24,
+      "avg_pct": -0.265,
+      "win_rate": 37.2,
+      "worst_pct": -11.63,
+      "best_pct": 19.75,
+      "max_dd_pct": -153.21,
+      "capture": -16.1,
+      "exits": {
+        "CLOSE": 269
+      }
+    },
+    "C": {
+      "label": "Sell at the open",
+      "n": 269,
+      "total_pct": 100.67,
+      "avg_pct": 0.374,
+      "win_rate": 65.4,
+      "worst_pct": -4.48,
+      "best_pct": 14.25,
+      "max_dd_pct": -15.09,
+      "capture": 27.7,
+      "exits": {
+        "OPEN": 269
+      }
+    },
+    "D": {
+      "label": "Lock fixed (+0.25% once +0.5%)",
+      "n": 269,
+      "total_pct": -75.41,
+      "avg_pct": -0.28,
+      "win_rate": 10.0,
+      "worst_pct": -4.58,
+      "best_pct": 19.75,
+      "max_dd_pct": -89.44,
+      "capture": -6.0,
+      "exits": {
+        "STOP": 68,
+        "PROFIT_LOCK": 162,
+        "CLOSE": 28,
+        "GAP": 11
+      }
+    },
+    "E": {
+      "label": "Tiered keep of peak (live default)",
+      "n": 269,
+      "total_pct": 114.88,
+      "avg_pct": 0.427,
+      "win_rate": 64.3,
+      "worst_pct": -4.58,
+      "best_pct": 14.65,
+      "max_dd_pct": -27.88,
+      "capture": 14.0,
+      "exits": {
+        "STOP": 68,
+        "PROFIT_LOCK": 189,
+        "GAP": 11,
+        "CLOSE": 1
+      }
+    },
+    "F": {
+      "label": "Lock and trail",
+      "n": 269,
+      "total_pct": 39.06,
+      "avg_pct": 0.145,
+      "win_rate": 62.5,
+      "worst_pct": -4.58,
+      "best_pct": 11.45,
+      "max_dd_pct": -32.42,
+      "capture": 7.4,
+      "exits": {
+        "STOP": 68,
+        "PROFIT_LOCK": 189,
+        "GAP": 11,
+        "CLOSE": 1
+      }
+    },
+    "G": {
+      "label": "+2% target / -2% stop",
+      "n": 269,
+      "total_pct": -121.44,
+      "avg_pct": -0.451,
+      "win_rate": 43.9,
+      "worst_pct": -4.58,
+      "best_pct": 14.25,
+      "max_dd_pct": -124.94,
+      "capture": -16.2,
+      "exits": {
+        "STOP": 136,
+        "TARGET": 116,
+        "GAP": 11,
+        "CLOSE": 6
+      }
+    }
+  },
+  "second_half": {
+    "A": {
+      "label": "Current: +1% target / -2% stop",
+      "n": 269,
+      "total_pct": -105.01,
+      "avg_pct": -0.39,
+      "win_rate": 55.8,
+      "worst_pct": -4.8,
+      "best_pct": 5.72,
+      "max_dd_pct": -105.63,
+      "capture": -8.9,
+      "exits": {
+        "STOP": 110,
+        "TARGET": 149,
+        "CLOSE": 6,
+        "GAP": 4
+      }
+    },
+    "B": {
+      "label": "Hold to close, no stop",
+      "n": 269,
+      "total_pct": 4.52,
+      "avg_pct": 0.017,
+      "win_rate": 45.0,
+      "worst_pct": -10.19,
+      "best_pct": 19.31,
+      "max_dd_pct": -63.99,
+      "capture": -4.8,
+      "exits": {
+        "CLOSE": 269
+      }
+    },
+    "C": {
+      "label": "Sell at the open",
+      "n": 269,
+      "total_pct": 39.73,
+      "avg_pct": 0.148,
+      "win_rate": 54.3,
+      "worst_pct": -4.7,
+      "best_pct": 5.72,
+      "max_dd_pct": -18.93,
+      "capture": 15.2,
+      "exits": {
+        "OPEN": 269
+      }
+    },
+    "D": {
+      "label": "Lock fixed (+0.25% once +0.5%)",
+      "n": 269,
+      "total_pct": -118.52,
+      "avg_pct": -0.441,
+      "win_rate": 8.6,
+      "worst_pct": -4.8,
+      "best_pct": 19.31,
+      "max_dd_pct": -121.74,
+      "capture": -13.2,
+      "exits": {
+        "STOP": 95,
+        "CLOSE": 24,
+        "PROFIT_LOCK": 146,
+        "GAP": 4
+      }
+    },
+    "E": {
+      "label": "Tiered keep of peak (live default)",
+      "n": 269,
+      "total_pct": 78.68,
+      "avg_pct": 0.292,
+      "win_rate": 54.6,
+      "worst_pct": -4.8,
+      "best_pct": 11.99,
+      "max_dd_pct": -28.96,
+      "capture": 5.5,
+      "exits": {
+        "STOP": 95,
+        "PROFIT_LOCK": 169,
+        "GAP": 4,
+        "CLOSE": 1
+      }
+    },
+    "F": {
+      "label": "Lock and trail",
+      "n": 269,
+      "total_pct": 1.83,
+      "avg_pct": 0.007,
+      "win_rate": 53.5,
+      "worst_pct": -4.8,
+      "best_pct": 9.35,
+      "max_dd_pct": -32.9,
+      "capture": -1.0,
+      "exits": {
+        "STOP": 95,
+        "PROFIT_LOCK": 169,
+        "GAP": 4,
+        "CLOSE": 1
+      }
+    },
+    "G": {
+      "label": "+2% target / -2% stop",
+      "n": 269,
+      "total_pct": -111.3,
+      "avg_pct": -0.414,
+      "win_rate": 44.6,
+      "worst_pct": -4.8,
+      "best_pct": 5.72,
+      "max_dd_pct": -115.65,
+      "capture": -17.5,
+      "exits": {
+        "STOP": 130,
+        "TARGET": 111,
+        "CLOSE": 24,
+        "GAP": 4
+      }
+    }
+  },
+  "double_costs": {
+    "A": {
+      "label": "Current: +1% target / -2% stop",
+      "n": 538,
+      "total_pct": -339.25,
+      "avg_pct": -0.631,
+      "win_rate": 55.4,
+      "worst_pct": -5.05,
+      "best_pct": 14.0,
+      "max_dd_pct": -339.37,
+      "capture": -8.3,
+      "exits": {
+        "STOP": 218,
+        "TARGET": 298,
+        "GAP": 15,
+        "CLOSE": 7
+      }
+    },
+    "B": {
+      "label": "Hold to close, no stop",
+      "n": 538,
+      "total_pct": -201.23,
+      "avg_pct": -0.374,
+      "win_rate": 38.5,
+      "worst_pct": -11.88,
+      "best_pct": 19.5,
+      "max_dd_pct": -303.01,
+      "capture": -10.5,
+      "exits": {
+        "CLOSE": 538
+      }
+    },
+    "C": {
+      "label": "Sell at the open",
+      "n": 538,
+      "total_pct": 5.9,
+      "avg_pct": 0.011,
+      "win_rate": 48.5,
+      "worst_pct": -4.95,
+      "best_pct": 14.0,
+      "max_dd_pct": -53.11,
+      "capture": 21.4,
+      "exits": {
+        "OPEN": 538
+      }
+    },
+    "D": {
+      "label": "Lock fixed (+0.25% once +0.5%)",
+      "n": 538,
+      "total_pct": -328.42,
+      "avg_pct": -0.61,
+      "win_rate": 9.3,
+      "worst_pct": -5.05,
+      "best_pct": 19.5,
+      "max_dd_pct": -329.4,
+      "capture": -9.6,
+      "exits": {
+        "STOP": 163,
+        "PROFIT_LOCK": 308,
+        "CLOSE": 52,
+        "GAP": 15
+      }
+    },
+    "E": {
+      "label": "Tiered keep of peak (live default)",
+      "n": 538,
+      "total_pct": 59.06,
+      "avg_pct": 0.11,
+      "win_rate": 47.2,
+      "worst_pct": -5.05,
+      "best_pct": 14.4,
+      "max_dd_pct": -61.34,
+      "capture": 9.7,
+      "exits": {
+        "STOP": 163,
+        "PROFIT_LOCK": 358,
+        "GAP": 15,
+        "CLOSE": 2
+      }
+    },
+    "F": {
+      "label": "Lock and trail",
+      "n": 538,
+      "total_pct": -93.61,
+      "avg_pct": -0.174,
+      "win_rate": 39.6,
+      "worst_pct": -5.05,
+      "best_pct": 11.2,
+      "max_dd_pct": -140.08,
+      "capture": 3.2,
+      "exits": {
+        "STOP": 163,
+        "PROFIT_LOCK": 358,
+        "GAP": 15,
+        "CLOSE": 2
+      }
+    },
+    "G": {
+      "label": "+2% target / -2% stop",
+      "n": 538,
+      "total_pct": -367.25,
+      "avg_pct": -0.683,
+      "win_rate": 43.9,
+      "worst_pct": -5.05,
+      "best_pct": 14.0,
+      "max_dd_pct": -367.37,
+      "capture": -16.9,
+      "exits": {
+        "STOP": 266,
+        "TARGET": 227,
+        "GAP": 15,
+        "CLOSE": 30
+      }
+    }
+  },
+  "wiggle_minus20": {
+    "D": {
+      "label": "Lock fixed (+0.25% once +0.5%)",
+      "n": 538,
+      "total_pct": -163.59,
+      "avg_pct": -0.304,
+      "win_rate": 9.5,
+      "worst_pct": -4.8,
+      "best_pct": 19.75,
+      "max_dd_pct": -187.65,
+      "capture": -6.4,
+      "exits": {
+        "STOP": 144,
+        "PROFIT_LOCK": 327,
+        "CLOSE": 52,
+        "GAP": 15
+      }
+    },
+    "E": {
+      "label": "Tiered keep of peak (live default)",
+      "n": 538,
+      "total_pct": 185.54,
+      "avg_pct": 0.345,
+      "win_rate": 56.7,
+      "worst_pct": -4.8,
+      "best_pct": 14.65,
+      "max_dd_pct": -26.59,
+      "capture": 12.8,
+      "exits": {
+        "STOP": 144,
+        "PROFIT_LOCK": 378,
+        "GAP": 15,
+        "CLOSE": 1
+      }
+    },
+    "F": {
+      "label": "Lock and trail",
+      "n": 538,
+      "total_pct": 54.47,
+      "avg_pct": 0.101,
+      "win_rate": 52.8,
+      "worst_pct": -4.8,
+      "best_pct": 11.49,
+      "max_dd_pct": -44.97,
+      "capture": 6.6,
+      "exits": {
+        "STOP": 144,
+        "PROFIT_LOCK": 378,
+        "GAP": 15,
+        "CLOSE": 1
+      }
+    }
+  },
+  "wiggle_plus20": {
+    "D": {
+      "label": "Lock fixed (+0.25% once +0.5%)",
+      "n": 538,
+      "total_pct": -201.0,
+      "avg_pct": -0.374,
+      "win_rate": 9.1,
+      "worst_pct": -4.8,
+      "best_pct": 19.75,
+      "max_dd_pct": -218.16,
+      "capture": -10.5,
+      "exits": {
+        "STOP": 171,
+        "PROFIT_LOCK": 300,
+        "CLOSE": 52,
+        "GAP": 15
+      }
+    },
+    "E": {
+      "label": "Tiered keep of peak (live default)",
+      "n": 538,
+      "total_pct": 190.24,
+      "avg_pct": 0.354,
+      "win_rate": 61.7,
+      "worst_pct": -4.8,
+      "best_pct": 14.65,
+      "max_dd_pct": -32.28,
+      "capture": 8.5,
+      "exits": {
+        "STOP": 171,
+        "PROFIT_LOCK": 349,
+        "GAP": 15,
+        "CLOSE": 3
+      }
+    },
+    "F": {
+      "label": "Lock and trail",
+      "n": 538,
+      "total_pct": 39.04,
+      "avg_pct": 0.073,
+      "win_rate": 52.4,
+      "worst_pct": -4.8,
+      "best_pct": 11.47,
+      "max_dd_pct": -52.52,
+      "capture": 2.1,
+      "exits": {
+        "STOP": 171,
+        "PROFIT_LOCK": 349,
+        "GAP": 15,
+        "CLOSE": 3
+      }
+    }
+  },
+  "random_entries": {
+    "A": {
+      "label": "Current: +1% target / -2% stop",
+      "avg_pct": -0.487,
+      "total_pct": -261.77
+    },
+    "B": {
+      "label": "Hold to close, no stop",
+      "avg_pct": -0.177,
+      "total_pct": -95.21
+    },
+    "C": {
+      "label": "Sell at the open",
+      "avg_pct": 0.169,
+      "total_pct": 91.14
+    },
+    "D": {
+      "label": "Lock fixed (+0.25% once +0.5%)",
+      "avg_pct": -0.457,
+      "total_pct": -245.46
+    },
+    "E": {
+      "label": "Tiered keep of peak (live default)",
+      "avg_pct": 0.078,
+      "total_pct": 41.81
+    },
+    "F": {
+      "label": "Lock and trail",
+      "avg_pct": -0.151,
+      "total_pct": -81.3
+    },
+    "G": {
+      "label": "+2% target / -2% stop",
+      "avg_pct": -0.497,
+      "total_pct": -266.99
+    }
+  },
+  "walk_forward": {
+    "train_dates": [
+      "2023-11-20",
+      "2025-12-12"
+    ],
+    "holdout_dates": [
+      "2025-12-15",
+      "2026-11-17"
+    ],
+    "chosen_on_train": "C",
+    "train": {
+      "label": "Sell at the open",
+      "n": 376,
+      "total_pct": 123.99,
+      "avg_pct": 0.33,
+      "win_rate": 63.3,
+      "worst_pct": -4.48,
+      "best_pct": 14.25,
+      "max_dd_pct": -15.09,
+      "capture": 25.7,
+      "exits": {
+        "OPEN": 376
+      }
+    },
+    "holdout": {
+      "label": "Sell at the open",
+      "n": 162,
+      "total_pct": 16.41,
+      "avg_pct": 0.101,
+      "win_rate": 51.9,
+      "worst_pct": -4.7,
+      "best_pct": 5.72,
+      "max_dd_pct": -17.41,
+      "capture": 11.8,
+      "exits": {
+        "OPEN": 162
+      }
+    },
+    "holdout_baseline_A": {
+      "label": "Current: +1% target / -2% stop",
+      "n": 162,
+      "total_pct": -66.17,
+      "avg_pct": -0.408,
+      "win_rate": 55.6,
+      "worst_pct": -4.8,
+      "best_pct": 5.72,
+      "max_dd_pct": -69.7,
+      "capture": -12.8,
+      "exits": {
+        "TARGET": 90,
+        "STOP": 68,
+        "CLOSE": 1,
+        "GAP": 3
+      }
+    }
+  },
+  "gate": {
+    "variant": "C",
+    "checks": {
+      "holdout_profitable_after_costs": true,
+      "worst_trade_better_than_baseline": true,
+      "capture_above_50pct": false,
+      "both_halves_profitable": true,
+      "survives_double_costs": true,
+      "beats_random_entries": true
+    },
+    "pass": false
+  }
+}

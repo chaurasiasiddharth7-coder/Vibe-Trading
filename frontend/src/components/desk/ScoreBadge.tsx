@@ -2,11 +2,11 @@ import { cn } from "@/lib/utils";
 import type { ScoreTone } from "@/components/desk/score";
 
 const TONE: Record<ScoreTone, { text: string; bar: string }> = {
-  strong: { text: "text-emerald-400", bar: "bg-emerald-500" },
-  good: { text: "text-emerald-300", bar: "bg-emerald-500/80" },
-  okay: { text: "text-amber-300", bar: "bg-amber-500" },
+  strong: { text: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-500" },
+  good: { text: "text-emerald-700 dark:text-emerald-300", bar: "bg-emerald-500/80" },
+  okay: { text: "text-amber-700 dark:text-amber-300", bar: "bg-amber-500" },
   weak: { text: "text-orange-300", bar: "bg-orange-500" },
-  avoid: { text: "text-rose-400", bar: "bg-rose-500" },
+  avoid: { text: "text-rose-600 dark:text-rose-400", bar: "bg-rose-500" },
 };
 
 /** A 0 to 10 score with a segmented meter and a one-word verdict (never colour alone). */

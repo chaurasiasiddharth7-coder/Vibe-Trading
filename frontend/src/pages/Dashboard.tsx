@@ -11,6 +11,7 @@ import { DASHBOARD_ONLY } from "@/lib/hosted";
 import { CustomizePanel } from "@/components/desk/CustomizePanel";
 import { investedDate } from "@/components/desk/tradeFilters";
 import { DeskPrefsProvider, useDeskPrefs, visibleTiles } from "@/lib/deskPrefs";
+import { GuardStrip } from "@/components/desk/GuardStrip";
 
 const Desk = lazy(() => import("@/pages/Desk").then((m) => ({ default: m.Desk })));
 
@@ -37,7 +38,7 @@ function Stat({ label, value, tone, strip, compact }: { label: string; value: st
   return (
     <div className={cn(strip ? "px-4 py-1 min-w-32" : cn("rounded-md bg-muted/50", compact ? "p-2" : "p-3"))}>
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={cn("font-mono text-base", tone === "good" && "text-emerald-400", tone === "bad" && "text-rose-400")}>
+      <dd className={cn("font-mono text-base", tone === "good" && "text-emerald-600 dark:text-emerald-400", tone === "bad" && "text-rose-600 dark:text-rose-400")}>
         {value}
       </dd>
     </div>
@@ -134,9 +135,9 @@ function DashboardView() {
   return (
     <main className={cn("min-h-[calc(100vh-2rem)] max-w-6xl", compact ? "p-3 sm:p-4 space-y-3" : "p-4 sm:p-6 space-y-5")} data-density={prefs.density}>
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-          <LayoutDashboard className="h-6 w-6 text-emerald-500" aria-hidden />
-          Dashboard
+        <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <LayoutDashboard className="h-6 w-6 text-muted-foreground" aria-hidden />
+          {DASHBOARD_ONLY ? "Stocks" : "Dashboard"}
         </h1>
         <p className="text-sm text-muted-foreground max-w-2xl">
           Today's ideas, your practice trades and the charts, in one place. All trades here use fake money.
@@ -147,6 +148,8 @@ function DashboardView() {
           </p>
         )}
       </header>
+
+      <GuardStrip />
 
       {ready && <CustomizePanel />}
 
@@ -172,7 +175,7 @@ function DashboardView() {
           <button
             type="button"
             onClick={() => go("trades")}
-            className="w-full text-left rounded-md border border-amber-700/60 bg-amber-950/30 px-3 min-h-11 text-sm text-amber-200 hover:bg-amber-950/50"
+            className="w-full text-left rounded-md border border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 px-3 min-h-11 text-sm text-amber-700 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-950/50"
           >
             {attention.length} open trade{attention.length === 1 ? "" : "s"} could use a look:{" "}
             {attention.map((t) => t.symbol).join(", ")}. Open My practice trades to see the suggestion.
@@ -226,13 +229,13 @@ function DashboardView() {
               className={cn(
                 "min-h-11 px-4 text-sm whitespace-nowrap border-b-2 -mb-px",
                 tab === tb.key
-                  ? "border-emerald-500 font-semibold"
+                  ? "border-foreground font-semibold"
                   : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
               {tb.label}
               {tb.key === "trades" && open.length > 0 && (
-                <span className="ml-2 text-xs font-mono text-muted-foreground">{open.length}</span>
+                <span className="ms-2 text-xs font-mono text-muted-foreground">{open.length}</span>
               )}
             </button>
           ))}
