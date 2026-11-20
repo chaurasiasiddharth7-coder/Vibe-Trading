@@ -161,7 +161,7 @@ export function Strategies() {
                         {r.last_test.gate?.passed ? "Passed" : "Failed"} · <span className="font-mono">{pct(r.last_test.summary?.avg_pct)}</span> over{" "}
                         <span className="font-mono">{r.last_test.summary?.trades ?? 0}</span> trades
                       </span>
-                    ) : r.kind === "lab" ? (
+                    ) : r.kind === "lab" || r.testable ? (
                       <span className="text-muted-foreground">Not tested yet</span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
@@ -355,8 +355,10 @@ function ResultView({ r }: { r: TestResult }) {
         ))}
       </dl>
       <p className="text-xs text-muted-foreground">
-        {r.years ? `${r.years} years of daily prices` : "Daily prices"} · {r.symbols_tested ?? "?"} stocks ({r.symbols_with_trades ?? 0} traded) · costs {r.cost_pct ?? 0.25}% a trade · entry at
-        the next open; if a day touched both the stop and the target, the stop is assumed first.
+        {r.years ? `${r.years} year${r.years > 1 ? "s" : ""} of daily prices` : "Daily prices"}
+        {r.days != null ? ` · ${r.days} days replayed (${r.skipped_days ?? 0} with no pick)` : ` · ${r.symbols_tested ?? "?"} stocks (${r.symbols_with_trades ?? 0} traded)`}
+        {r.universe ? ` · ${UNIVERSE_OPTIONS.find((u) => u.id === r.universe)?.label ?? r.universe}` : ""} · costs {r.cost_pct ?? 0.25}% a trade ·{" "}
+        {r.note ?? "entry at the next open; if a day touched both the stop and the target, the stop is assumed first."}
       </p>
       {r.equity && <Sparkline points={r.equity} />}
       {r.gate && (
@@ -404,6 +406,7 @@ function ResultView({ r }: { r: TestResult }) {
 function useTestRunner() {
   const [running, setRunning] = useState(false);
   const [secs, setSecs] = useState(0);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<TestResult | null>(null);
   const [error, setError] = useState("");
   const stop = useRef({ stop: false });
@@ -413,9 +416,17 @@ function useTestRunner() {
     setError("");
     setResult(null);
     setSecs(0);
+    setProgress(null);
     try {
       const { job_id } = await start();
-      const job = await waitForJob(job_id, setSecs, stop.current);
+      const job = await waitForJob(
+        job_id,
+        (s, p) => {
+          setSecs(s);
+          setProgress(p ?? null);
+        },
+        stop.current,
+      );
       if (job.status === "failed") setError(job.error ?? "The test failed.");
       else setResult(job.result);
     } catch (e) {
@@ -424,7 +435,7 @@ function useTestRunner() {
       setRunning(false);
     }
   };
-  return { running, secs, result, error, run };
+  return { running, secs, progress, result, error, run };
 }
 
 function StrategyPanel({
@@ -450,14 +461,16 @@ function StrategyPanel({
   const tr = useTestRunner();
   const profile = isOwner ? row.profile : null;
   const lab = row.kind === "lab";
+  const testable = lab || !!row.testable;
+  const [universe, setUniverse] = useState("nifty100");
 
   useEffect(() => {
-    if (!lab) return;
+    if (!testable) return;
     strategiesApi
       .detail(row.id, profile)
       .then((r) => setTests(r.data.tests))
       .catch(() => setTests([]));
-  }, [row.id, profile, lab, tr.result]);
+  }, [row.id, profile, testable, tr.result]);
 
   const latest = tr.result ?? tests[tests.length - 1] ?? null;
   const scan = async () => {
@@ -526,10 +539,19 @@ function StrategyPanel({
         )}
       </section>
 
-      {lab && (
+      {testable && (
         <section className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold me-auto">Test on past prices</h3>
+            {row.id === "signal_board" && (
+              <select className="min-h-9 rounded-md border border-border bg-background px-2 text-sm" value={universe} onChange={(e) => setUniverse(e.target.value)} aria-label="Stocks to test">
+                {UNIVERSE_OPTIONS.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.label}
+                  </option>
+                ))}
+              </select>
+            )}
             <select className="min-h-9 rounded-md border border-border bg-background px-2 text-sm" value={years} onChange={(e) => setYears(Number(e.target.value))} aria-label="Years of history">
               {[1, 2, 3, 5].map((y) => (
                 <option key={y} value={y}>
@@ -540,14 +562,28 @@ function StrategyPanel({
             <button
               type="button"
               disabled={tr.running || !canEdit}
-              onClick={() => void tr.run(() => strategiesApi.test(row.id, years, profile).then((r) => ({ job_id: r.job_id })))}
+              onClick={() =>
+                void tr.run(() => strategiesApi.test(row.id, years, profile, row.id === "signal_board" ? universe : undefined).then((r) => ({ job_id: r.job_id })))
+              }
               className="min-h-9 px-3 rounded-md border border-border text-sm inline-flex items-center gap-1 disabled:opacity-60"
             >
-              <FlaskConical className="h-4 w-4" aria-hidden /> {tr.running ? `Testing… ${tr.secs}s` : "Run test"}
+              <FlaskConical className="h-4 w-4" aria-hidden />{" "}
+              {tr.running
+                ? tr.progress
+                  ? `Testing… ${tr.progress.done} of ${tr.progress.total} ${row.id === "btst" ? "days" : "stocks"}`
+                  : `Testing… ${tr.secs}s`
+                : "Run test"}
             </button>
           </div>
+          {tr.running && row.id === "btst" && !latest && (
+            <p className="text-xs text-muted-foreground">The first run rebuilds every past day from the price store, so it can take a few minutes. Later runs reuse those days.</p>
+          )}
           {tr.error && <Note tone="bad">{tr.error}</Note>}
-          {latest ? <ResultView r={latest} /> : <p className="text-sm text-muted-foreground">Not tested yet. Paper trading unlocks after the first test.</p>}
+          {latest ? (
+            <ResultView r={latest} />
+          ) : (
+            <p className="text-sm text-muted-foreground">{lab ? "Not tested yet. Paper trading unlocks after the first test." : "Not tested yet. Run it to see how these rules did on past prices."}</p>
+          )}
         </section>
       )}
 

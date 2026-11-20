@@ -546,7 +546,8 @@ def update_custom(sid: str, body: dict[str, Any]) -> dict[str, Any]:
 
 def record_test(sid: str, result: dict[str, Any], years: int) -> None:
     keep = {k: result.get(k) for k in ("summary", "robustness", "gate", "equity", "by_symbol", "cost_pct",
-                                       "symbols_tested", "symbols_with_trades")}
+                                       "symbols_tested", "symbols_with_trades", "note", "universe", "days",
+                                       "skipped_days")}
     keep.update({"ran_at": _now(), "years": years, "trades_sample": (result.get("trades") or [])[-50:]})
     with _LOCK:
         data = _load()
@@ -859,6 +860,11 @@ def _entries_for_profile(pid: str | None, owner_name: str) -> list[dict[str, Any
                  tests_run=len(tests))
         entries.append(e)
     for e in entries:
+        if e["kind"] == "built-in":  # past tests of the built-ins (strategies_builtin)
+            tests = data["tests"].get(e["id"]) or []
+            e["testable"] = e["id"] in ("signal_board", "btst")
+            e["last_test"] = {k: tests[-1].get(k) for k in ("summary", "gate", "ran_at", "years")} if tests else None
+            e["tests_run"] = len(tests)
         e["gate"] = live_gate(e)
     return entries
 

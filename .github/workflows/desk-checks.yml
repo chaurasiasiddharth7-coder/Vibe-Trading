@@ -42,7 +42,7 @@ jobs:
           tests/test_desk_users.py tests/test_wealth_pages.py tests/test_desk_profiles.py
           tests/test_auth_precedence.py tests/test_security_auth_api.py tests/test_api_infrastructure.py
           tests/test_alphadesk_board_paper.py tests/test_btst.py tests/test_intraday_days.py
-          tests/test_runtime_scheduler.py tests/test_sse_ticket_and_headers.py tests/test_spa_deep_link.py tests/test_nse_daily.py tests/test_fast_forecast.py tests/test_live_quotes_watchlist.py tests/test_market_brief.py
+          tests/test_runtime_scheduler.py tests/test_sse_ticket_and_headers.py tests/test_spa_deep_link.py tests/test_nse_daily.py tests/test_fast_forecast.py tests/test_live_quotes_watchlist.py tests/test_market_brief.py tests/test_strategies_builtin.py
 
   frontend:
     runs-on: ubuntu-latest
