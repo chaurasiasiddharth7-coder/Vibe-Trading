@@ -14,6 +14,7 @@ RUN pip install -r agent/requirements.txt \
     && pip install einops safetensors huggingface_hub tqdm
 
 COPY agent/ agent/
+COPY scripts/nse_pull.py scripts/nse_pull.py
 COPY third_party/Kronos third_party/Kronos
 
 RUN useradd --create-home --shell /usr/sbin/nologin vibe \

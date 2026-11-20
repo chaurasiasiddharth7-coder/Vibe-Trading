@@ -13,7 +13,8 @@ set -euo pipefail
 : "${DEPLOY_HOST:?set DEPLOY_HOST=user@host}"
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/vibe-trading}"
 SEED=0; DRY=0
-for a in "$@"; do case "$a" in --seed-intraday) SEED=1 ;; --dry-run) DRY=1 ;; *) echo "unknown option $a"; exit 2 ;; esac; done
+SEED_NSE=0
+for a in "$@"; do case "$a" in --seed-intraday) SEED=1 ;; --seed-nse) SEED_NSE=1 ;; --dry-run) DRY=1 ;; *) echo "unknown option $a"; exit 2 ;; esac; done
 
 repo="$(git rev-parse --show-toplevel)"
 cd "$repo"
@@ -45,5 +46,18 @@ if [ "$SEED" = 1 ]; then
   [ -d "$src/days" ] || { echo "nothing to seed: $src/days not found"; exit 1; }
   COPYFILE_DISABLE=1 tar --no-xattrs -C "$src" -cf - days bars | ssh "$DEPLOY_HOST" "cd $DEPLOY_DIR/deploy/alphadesk && docker compose exec -T alphadesk-api sh -c 'mkdir -p /home/vibe/.vibe-trading/alphadesk/intraday && tar -C /home/vibe/.vibe-trading/alphadesk/intraday -xf -'"
   echo "seeded $(ls "$src/days" | wc -l | tr -d ' ') filed days and the 5-minute store"
+fi
+if [ "$SEED_NSE" = 1 ]; then
+  # The NSE price store makes scans ~10x faster than Yahoo. Copied once; the server then updates it every evening.
+  src="${NSE_DATA_DIR:-$HOME/.vibe-trading/nse}"
+  if ssh "$DEPLOY_HOST" "cd $DEPLOY_DIR/deploy/alphadesk && docker compose exec -T alphadesk-api test -f /home/vibe/.vibe-trading/nse/bars.parquet"; then
+    echo "NSE store already on the server (it updates itself every evening)"
+  elif [ -f "$src/bars.parquet" ]; then
+    echo "copying the NSE price store to the server (one time, ~0.5 GB)..."
+    COPYFILE_DISABLE=1 tar --no-xattrs -C "$src" --exclude yahoo_cache_daily -cf - . | ssh "$DEPLOY_HOST" "cd $DEPLOY_DIR/deploy/alphadesk && docker compose exec -T alphadesk-api sh -c 'mkdir -p /home/vibe/.vibe-trading/nse && tar -C /home/vibe/.vibe-trading/nse -xf -'"
+    echo "NSE store copied"
+  else
+    echo "no local NSE store at $src: skipped (scans keep using Yahoo)"
+  fi
 fi
 echo "backend live. Next: deploy the front end (cd frontend && vercel deploy --prod)."

@@ -35,7 +35,7 @@ ssh -o BatchMode=yes -o ConnectTimeout=10 "$DEPLOY_HOST" true || {
 }
 
 step "Server: rsync + docker compose up --build (takes a few minutes)"
-(cd "$WT" && bash deploy/alphadesk/deploy.sh) || fail "server deploy failed (see above). The website was NOT updated."
+(cd "$WT" && bash deploy/alphadesk/deploy.sh --seed-nse) || fail "server deploy failed (see above). The website was NOT updated."
 
 step "Owner sign-in for the website"
 if ssh "$DEPLOY_HOST" "cd $DEPLOY_DIR/deploy/alphadesk && docker compose exec -T alphadesk-api python -m src.alphadesk.users list" 2>/dev/null | grep -q " owner "; then
