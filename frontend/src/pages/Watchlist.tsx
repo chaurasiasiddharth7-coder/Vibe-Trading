@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStockSheet } from "@/components/desk/StockSheet";
+import { TodayBrief } from "@/components/desk/TodayBrief";
 import { Check, Pencil, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuotes } from "@/hooks/useQuotes";
@@ -12,10 +13,13 @@ export function Watchlist() {
   const sheet = useStockSheet();
   const [lists, setLists] = useState<WatchList[] | null>(null);
   const [max, setMax] = useState(250);
-  const [active, setActive] = useState(() => {
-    const n = Number(sessionStorage.getItem("wl-tab"));
-    return Number.isInteger(n) && n >= 0 && n < 5 ? n : 0;
+  // "today" (the brief) or a watchlist index. Opens on Today unless you picked a list this visit.
+  const [tab, setTab] = useState<"today" | number>(() => {
+    const raw = sessionStorage.getItem("wl-tab");
+    const n = Number(raw);
+    return raw !== null && raw !== "today" && Number.isInteger(n) && n >= 0 && n < 5 ? n : "today";
   });
+  const active = tab === "today" ? 0 : tab;
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,13 +35,13 @@ export function Watchlist() {
 
   useEffect(() => {
     try {
-      sessionStorage.setItem("wl-tab", String(active));
+      sessionStorage.setItem("wl-tab", String(tab));
     } catch {
       // fine
     }
-  }, [active]);
+  }, [tab]);
 
-  const items = useMemo(() => lists?.[active]?.items ?? [], [lists, active]);
+  const items = useMemo(() => (tab === "today" ? [] : lists?.[active]?.items ?? []), [lists, active, tab]);
   const { data } = useQuotes(items, false);
 
   const act = async (fn: () => Promise<{ lists: WatchList[] }>) => {
@@ -52,16 +56,28 @@ export function Watchlist() {
   return (
     <main className="max-w-3xl mx-auto pb-24 md:pb-8">
       <div role="tablist" aria-label="Watchlists" className="flex gap-6 overflow-x-auto px-4 pt-2 no-scrollbar">
+        <button
+          role="tab"
+          type="button"
+          aria-selected={tab === "today"}
+          onClick={() => setTab("today")}
+          className={cn(
+            "shrink-0 min-h-11 pb-1 text-[15px] font-semibold border-b-2 transition-colors",
+            tab === "today" ? "text-primary border-primary" : "text-foreground/80 border-transparent hover:text-foreground",
+          )}
+        >
+          Today
+        </button>
         {(lists ?? Array.from({ length: 5 }, (_, i) => ({ name: `Watchlist ${i + 1}`, items: [] }))).map((l, i) => (
           <button
             key={i}
             role="tab"
             type="button"
-            aria-selected={i === active}
-            onClick={() => setActive(i)}
+            aria-selected={tab === i}
+            onClick={() => setTab(i)}
             className={cn(
               "shrink-0 min-h-11 pb-1 text-[15px] font-semibold border-b-2 transition-colors",
-              i === active ? "text-primary border-primary" : "text-foreground/80 border-transparent hover:text-foreground",
+              tab === i ? "text-primary border-primary" : "text-foreground/80 border-transparent hover:text-foreground",
             )}
           >
             {l.name}
@@ -69,6 +85,10 @@ export function Watchlist() {
         ))}
       </div>
 
+      {tab === "today" ? (
+        <TodayBrief />
+      ) : (
+      <>
       <div className="px-3 pt-3">
         <AddBar
           count={items.length}
@@ -128,6 +148,8 @@ export function Watchlist() {
           })}
         </ul>
       </section>
+      </>
+      )}
     </main>
   );
 }

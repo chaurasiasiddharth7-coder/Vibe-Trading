@@ -57,3 +57,59 @@ export function tone(change: number | null | undefined): string {
   if (change == null || change === 0) return "text-foreground";
   return change > 0 ? "text-success" : "text-danger";
 }
+
+export interface BriefPick {
+  symbol: string;
+  score: number | null;
+  price: number | null;
+  change_percent: number | null;
+  entry: number | null;
+  stop: number | null;
+  target: number | null;
+  risk_pct: number | null;
+  kronos_change_pct: number | null;
+  reasons: string[];
+}
+
+export interface BriefNews {
+  title: string;
+  url: string;
+  source: string;
+  sources: string[];
+  ts: number | null;
+  watchlist: string[];
+  important: boolean;
+}
+
+export interface Mover {
+  symbol: string;
+  ltp: number;
+  change_pct: number;
+}
+
+export interface Brief {
+  generated_at: string;
+  status: { state: "open" | "pre_open" | "closed" | "holiday"; label: string };
+  live: boolean;
+  indices: Array<Quote & { source?: string; stale?: boolean }>;
+  insight: { bullets: string[]; by: "ai" | "rules" };
+  breadth: {
+    source?: "kite" | "nse";
+    as_of?: string | null;
+    universe?: string;
+    advancers?: number;
+    decliners?: number;
+    unchanged?: number;
+    gainers?: Mover[];
+    losers?: Mover[];
+    sectors_up?: Array<{ sector: string; change_pct: number }>;
+    sectors_down?: Array<{ sector: string; change_pct: number }>;
+  };
+  picks: { rows: BriefPick[]; scanned_at: string | null; universe: string | null; longs?: number; shorts?: number; scanned?: number };
+  news: BriefNews[];
+  disclaimer: string;
+}
+
+export const briefApi = {
+  get: () => request<Brief>("/api/desk/brief"),
+};

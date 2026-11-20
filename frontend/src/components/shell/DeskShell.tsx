@@ -138,7 +138,7 @@ function Frame() {
             )}
           </div>
         </div>
-        <IndexStrip className="hidden md:grid max-w-md border-t border-border" />
+        <IndexStrip className="hidden md:flex border-t border-border" />
       </header>
       {state === "offline" && (
         <p className="px-4 py-2 text-sm bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
