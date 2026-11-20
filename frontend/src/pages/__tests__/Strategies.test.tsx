@@ -146,7 +146,7 @@ describe("Strategies page", () => {
     await userEvent.click(screen.getByRole("button", { name: "Overnight (BTST) pick" }));
     const dialog = await screen.findByRole("dialog");
     await userEvent.click(within(dialog).getByRole("button", { name: /Run test/ }));
-    expect(test).toHaveBeenCalledWith("btst", 3, null, undefined);
+    expect(test).toHaveBeenCalledWith("btst", 3, null, undefined, undefined);
     expect(await within(dialog).findByText(/735 days replayed \(323 with no pick\)/)).toBeInTheDocument();
     expect(within(dialog).getByText("412")).toBeInTheDocument();
     expect(within(dialog).getByText(/Backtest gate: passed/)).toBeInTheDocument();

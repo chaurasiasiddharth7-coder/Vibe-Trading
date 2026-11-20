@@ -93,8 +93,10 @@ def register_strategies_routes(app: FastAPI, require_auth: AuthDep) -> None:
             raise bad(exc) from exc
 
     @app.get("/api/desk/strategies/jobs/{job_id}", dependencies=[Depends(require_auth)])
-    def get_job(job_id: str) -> dict[str, Any]:
-        j = S.job(job_id)
+    def get_job(job_id: str, profile: str | None = Query(None)) -> dict[str, Any]:
+        # The owner can run a test in another profile; it's polled in that profile too.
+        with scoped(profile):
+            j = S.job(job_id)
         if j is None:
             raise HTTPException(status_code=404, detail="Test not found (the server may have restarted).")
         return {"ok": True, "data": j}
@@ -135,7 +137,8 @@ def register_strategies_routes(app: FastAPI, require_auth: AuthDep) -> None:
 
             if sid in SB.TESTABLE:  # built-ins replay their own engines
                 try:
-                    jid = SB.start(sid, int(body.get("years") or 3), str(body.get("universe") or "nifty100"))
+                    jid = SB.start(sid, int(body.get("years") or 3), str(body.get("universe") or "nifty100"),
+                                   int(body.get("sessions") or 40))
                 except (S.StrategyError, TypeError, ValueError) as exc:
                     raise bad(exc) from exc
                 return {"ok": True, "job_id": jid}

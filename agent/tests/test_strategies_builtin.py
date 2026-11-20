@@ -113,7 +113,60 @@ def test_start_records_test_for_the_catalogue(home, monkeypatch):
     assert j["status"] == "done" and j["result"]["note"] == "n"
     rows = {r["id"]: r for r in S.catalogue(False)["strategies"]}
     assert rows["btst"]["testable"] and rows["btst"]["last_test"]["summary"]["trades"] == 1
-    assert rows["intraday"]["testable"] is False and rows["intraday"]["last_test"] is None
+    assert rows["intraday"]["testable"] is True and rows["intraday"]["last_test"] is None
     assert S.detail("btst")["tests"][-1]["note"] == "n"
     with pytest.raises(S.StrategyError):
-        SB.start("intraday")
+        SB.start("lab_x")
+
+
+def test_intraday_replays_recent_days_without_filing(home, monkeypatch):
+    from src.alphadesk.intraday import calendar as cal
+    from src.alphadesk.intraday import days as D
+
+    filed = []
+    monkeypatch.setattr(cal, "is_trading_day", lambda d: d.weekday() < 5)
+    monkeypatch.setattr(D, "save_day", lambda rec: filed.append(rec))
+    monkeypatch.setattr(D, "plan_open", lambda d, settings, past=False: {"planned": [{"symbol": "LT"}], "universe": {}})
+
+    def evaluate(d, rec, settings, live_now):
+        assert live_now is None and rec["planned"]
+        win = d.day % 2 == 0
+        return {"trades": [{"symbol": "LT", "side": "long", "status": "target" if win else "stop", "entry": 100.0, "qty": 10,
+                            "risk_per_share": 1.0, "r_gross": 2.0 if win else -1.0, "pnl_inr": 18.0 if win else -12.0}],
+                "skipped": [], "data_gaps": [], "not_triggered": [], "as_of": None, "_frames": {}}
+
+    monkeypatch.setattr(D, "evaluate", evaluate)
+    r = SB.run_intraday(20, today=date(2026, 11, 20))
+    assert not filed  # the paper record is left alone
+    assert r["sessions"] == 20 and r["days"] == 20 and r["summary"]["trades"] == 20
+    t = r["trades"][0]
+    assert t["net_pct"] in (1.8, -1.2) and t["gross_pct"] in (2.0, -1.0)
+    assert r["cost_pct"] == pytest.approx(0.2)
+    assert "60 days" in r["note"]
+
+
+def test_guard_text_reads_plainly():
+    lines = S.guard_text({"layer1": {"target_r": None, "scale_out_frac": 0.0, "time_stop_bars": 0}})
+    assert lines == ["No fixed take-profit: winners run until the trailing stop", "No partial booking", "No time stop"]
+    assert S.guard_text({"layer1": {"scale_out_frac": 0.5, "scale_out_at_r": 1.5}}) == ["Book 50% of the position at +1.5R"]
+
+
+def test_owner_polls_a_job_started_in_another_profile(home):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from src.alphadesk import profiles
+    from src.api.security import require_auth
+    from src.api.strategies_routes import register_strategies_routes
+
+    profiles.create("ayushi", "Ayushi")
+    with profiles.use("ayushi"):
+        with S._JOBS_LOCK:
+            S._JOBS["jx"] = {"id": "jx", "strategy_id": "signal_board", "status": "done", "profile": "ayushi",
+                             "started": time.time(), "result": {"summary": {"trades": 0}}, "error": None}
+    app = FastAPI()
+    register_strategies_routes(app, require_auth)
+    c = TestClient(app)
+    assert c.get("/api/desk/strategies/jobs/jx").status_code == 404  # not the owner's own job
+    r = c.get("/api/desk/strategies/jobs/jx?profile=ayushi")
+    assert r.status_code == 200 and r.json()["data"]["status"] == "done"
