@@ -152,6 +152,23 @@ describe("Strategies page", () => {
     expect(within(dialog).getByText(/Backtest gate: passed/)).toBeInTheDocument();
   });
 
+  it("the row's Backtest button opens the strategy and starts the past-price test at once", async () => {
+    const api = await import("@/lib/strategiesApi");
+    vi.spyOn(api.strategiesApi, "list").mockResolvedValue({ ok: true, data: { ...catalogue, strategies: [row({ testable: true, last_test: null })] } });
+    vi.spyOn(api.strategiesApi, "detail").mockResolvedValue({ ok: true, data: { strategy: null, tests: [], paper_trades: [] } });
+    const test = vi.spyOn(api.strategiesApi, "test").mockResolvedValue({ ok: true, job_id: "j2" });
+    vi.spyOn(api.strategiesApi, "job").mockResolvedValue({
+      ok: true,
+      data: { id: "j2", status: "done", error: null, result: { summary: { trades: 120, win_rate: 50, avg_pct: -0.1, max_drawdown_pct: -5 }, gate: { passed: false, checks: [] }, years: 3 } },
+    } as never);
+    const { Strategies } = await import("@/pages/Strategies");
+    render(<Strategies />);
+    await userEvent.click(await screen.findByRole("button", { name: "Backtest Overnight (BTST) pick on past prices" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(test).toHaveBeenCalledWith("btst", 3, null, undefined, undefined);
+    expect(await within(dialog).findByText(/Backtest gate: failed/)).toBeInTheDocument();
+  });
+
   it("shows a paused strategy's reason, live vs replay, and the Kronos split", async () => {
     const sum = (trades: number, total: number) => ({ trades, unit: "R" as const, total, avg: trades ? total / trades : null, win_rate: 0.4, pnl_inr: null, first: null, last: null });
     const paused = row({
