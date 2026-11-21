@@ -31,10 +31,11 @@ def trending(n=900, seed=1, drift=0.0012):
 
 def test_scorecard_shape_and_gate():
     trades = [{"symbol": f"S{i % 3}", "entry_date": f"2025-01-{i % 28 + 1:02d}", "exit_date": f"2025-02-{i % 28 + 1:02d}",
-               "gross_pct": 1.5 if i % 3 else -1.0, "net_pct": 1.35 if i % 3 else -1.15, "reason": "x"} for i in range(40)]
+               "gross_pct": 1.5 if i % 3 else -1.0, "net_pct": 1.35 if i % 3 else -1.15, "reason": "x"} for i in range(120)]
     r = SB.scorecard(trades, random_avg=0.1, random_label="random", years=3, cost_pct=0.15, symbols_tested=3, note="n")
-    assert r["summary"]["trades"] == 40 and r["gate"]["passed"] is True
-    assert {c["label"] for c in r["gate"]["checks"]} >= {"At least 30 trades", "Profitable after costs", "random"}
+    assert r["summary"]["trades"] == 120 and r["gate"]["passed"] is True
+    assert {c["label"] for c in r["gate"]["checks"]} >= {"At least 100 trades", "Profitable after costs", "random",
+                                                        "Still profitable without its best 5% of trades"}
     assert set(r["robustness"]) == {"first_half", "second_half", "double_costs", "holdout_last_30pct", "random_entries"}
     assert r["equity"][-1]["cum_pct"] == pytest.approx(sum(t["net_pct"] for t in trades), abs=0.05)
 

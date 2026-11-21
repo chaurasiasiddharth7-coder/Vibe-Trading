@@ -163,7 +163,7 @@ def replay_br_pdh_pdl(
                 "notes": "br_pdh_pdl sim replay",
             },
         )
-        apply_outcome_to_engine(ENGINE_ID, r_multiple=float(r), pnl_inr=pnl)
+        apply_outcome_to_engine(ENGINE_ID, r_multiple=float(r), pnl_inr=pnl, replay=True)
         applied += 1
 
     # Mark this (symbol, date range) as having been replayed

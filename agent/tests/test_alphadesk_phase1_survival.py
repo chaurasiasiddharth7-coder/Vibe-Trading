@@ -58,7 +58,27 @@ def test_expectancy_death_after_30(alphadesk_tmp: Path):
         surv.apply_outcome_to_engine("debate", r_multiple=-0.1, pnl_inr=-10)
     state = surv.load_engine("debate")
     assert state["status"] == "DEAD"
-    assert state.get("death_reason") == "expectancy_non_positive"
+    assert state.get("death_reason") == "losing_with_95pct_confidence"
+
+
+def test_no_death_on_a_noisy_small_loss(alphadesk_tmp: Path):
+    """The old rule killed any engine below 0 at 30 trades; now only proof of losing does."""
+    surv.reset_engine("debate", sleeve_inr=1_000_000)
+    for i in range(30):
+        surv.apply_outcome_to_engine("debate", r_multiple=2.0 if i % 3 == 0 else -1.05, pnl_inr=1)
+    assert surv.load_engine("debate")["status"] != "DEAD"
+
+
+def test_dead_engine_keeps_counting_and_replays_stay_apart(alphadesk_tmp: Path):
+    surv.reset_engine("debate", sleeve_inr=1_000_000)
+    for _ in range(30):
+        surv.apply_outcome_to_engine("debate", r_multiple=-0.1, pnl_inr=-10)
+    surv.apply_outcome_to_engine("debate", r_multiple=1.0, pnl_inr=100)
+    st = surv.load_engine("debate")
+    assert st["status"] == "DEAD" and st["closed_trades"] == 31
+    surv.apply_outcome_to_engine("debate", r_multiple=5.0, pnl_inr=500, replay=True)
+    st = surv.load_engine("debate")
+    assert st["closed_trades"] == 31 and st["replay"]["trades"] == 1
 
 
 def test_pm_hygiene_plan(alphadesk_tmp: Path):

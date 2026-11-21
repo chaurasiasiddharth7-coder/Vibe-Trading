@@ -11,6 +11,9 @@
     GET   /api/desk/strategies/jobs/{job_id}
     POST  /api/desk/strategies/{id}/scan-now       run today's paper scan for a lab strategy
     POST  /api/desk/strategies/import              {text?, url?} -> drafted rules to review (owner only: uses the AI model)
+    GET   /api/desk/health                         the kill switch's verdict per strategy, live vs replay, Kronos split
+    POST  /api/desk/health/check                   run the kill switch now (owner: every profile)
+    GET   /api/desk/health/weekly                  the last weekly audit (?run=1 makes a fresh one)
 
 ``?profile=<id>`` lets the owner act on another profile's strategy.
 """
@@ -160,5 +163,47 @@ def register_strategies_routes(app: FastAPI, require_auth: AuthDep) -> None:
             except S.StrategyError as exc:
                 raise bad(exc) from exc
 
+    @app.get("/api/desk/health", dependencies=[Depends(require_auth)])
+    def get_health(profile: str | None = Query(None)) -> dict[str, Any]:
+        from src.alphadesk import health
+
+        with scoped(profile):
+            rows = [{"id": sid, "paper": S.paper_on(sid),
+                     "auto_paused": (S._load()["switches"].get(sid) or {}).get("auto_paused"),
+                     **health.strategy_health(sid)}
+                    for sid in list(S.BUILTINS) + [c["id"] for c in S._load()["custom"] if not c.get("archived")]]
+            return {"ok": True, "data": {"strategies": rows, "kronos": health.kronos_split(), "rule": health.RULE_TEXT}}
+
+    @app.post("/api/desk/health/check", dependencies=[Depends(require_auth)])
+    def run_health() -> dict[str, Any]:
+        from src.alphadesk import health
+
+        if _is_owner():
+            out = health.check_all_profiles()
+        else:
+            out = {"you": health.check()}
+        return {"ok": True, "data": {k: [{x: r.get(x) for x in ("id", "paper", "action", "verdict", "auto_paused")}
+                                         for r in v] for k, v in out.items()}}
+
+    @app.get("/api/desk/health/weekly", dependencies=[Depends(require_auth)])
+    def get_weekly(run: int = Query(0), profile: str | None = Query(None)) -> dict[str, Any]:
+        from src.alphadesk import health
+
+        with scoped(profile):
+            return {"ok": True, "data": health.weekly() if run else health.last_weekly()}
+
     if os.environ.get("STRATEGY_SCHEDULER", os.environ.get("INTRADAY_SCHEDULER", "")) == "1":
         S.start_scheduler()
+        import threading
+
+        def first_check() -> None:  # apply the audit pauses and the kill switch at start-up, not only after 15:45
+            try:
+                from src.alphadesk import health
+
+                health.check_all_profiles()
+            except Exception:  # noqa: BLE001
+                import logging
+
+                logging.getLogger(__name__).warning("start-up health check failed", exc_info=True)
+
+        threading.Thread(target=first_check, daemon=True, name="health-first-check").start()

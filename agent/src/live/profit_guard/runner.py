@@ -308,7 +308,8 @@ class GuardRunner:
         for scope in sorted(scopes):
             members = [p for p in everything if self._scope_of(p) == scope]
             mtm = rules.portfolio_mtm(members, px, day_start_ms=day_start)
-            st, pacts = rules.update_portfolio(self._portfolio(scope, today), mtm, self.cfg)
+            scope_cfg = self.cfg.for_strategy(scope) if scope != "account" else self.cfg  # per-strategy layer2
+            st, pacts = rules.update_portfolio(self._portfolio(scope, today), mtm, scope_cfg)
             self.store.save_portfolio(st, now_ms)
             actions_by_scope[scope] = pacts
             actions += pacts

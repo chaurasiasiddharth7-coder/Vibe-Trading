@@ -58,6 +58,13 @@ EXIT_PLANS: dict[str, dict[str, Any]] = {
 }
 DEFAULT_PLAN = "fixed"
 
+# Audit of 21 Nov 2026: over 5 years of Nifty 200 the board's longs made +718R (profit factor 1.23)
+# and its shorts lost -326R (0.78); live, shorts lost -5.5R. Fixed exits beat trailing ones
+# (+392R vs +91R). So signal-board practice trades are longs only, with fixed exits.
+BOARD_SIDES = {"LONG"}
+BOARD_PLANS = {"fixed"}
+RULE_VERSION = "board-2026-11-21"  # stamped on every new trade; bump when the rules change
+
 
 def _plan_for(bar_time: str, plans: list[dict[str, Any]]) -> dict[str, Any]:
     """Plan in effect for a bar: the latest switch made before that session."""
@@ -263,10 +270,32 @@ def open_trade(
         return _open_trade(row, risk_inr=risk_inr, plan=plan)
 
 
-def _open_trade(row: dict[str, Any], *, risk_inr: float, plan: str) -> dict[str, Any]:
+def board_allows(side: str) -> str | None:
+    """Why a new signal-board practice trade can't open right now, or None if it can."""
+    if side not in BOARD_SIDES:
+        return ("Short trades are switched off on the signal board: over 5 years they lost -326R while longs made "
+                "+718R (audit, 21 Nov 2026).")
+    try:
+        from src.alphadesk.strategies import paper_on
+
+        if not paper_on("signal_board"):
+            return "Paper trading for the signal board is switched off on the Strategies page."
+    except Exception:  # noqa: BLE001 - a broken switch file must not block the ledger
+        pass
+    return None
+
+
+def _open_trade(row: dict[str, Any], *, risk_inr: float, plan: str, strategy_id: str | None = None) -> dict[str, Any]:
     side = str(row.get("side") or "")
     if side not in {"LONG", "SHORT"}:
         raise ValueError("only LONG or SHORT rows can be paper traded")
+    if strategy_id is None:
+        why = board_allows(side)
+        if why:
+            raise ValueError(why)
+        if plan not in BOARD_PLANS:
+            raise ValueError("Signal-board trades use fixed exits (stop 1.5x ATR, target 3x ATR, 20 days): "
+                             "they beat trailing exits over 5 years (+392R vs +91R).")
     entry, stop, target = row.get("entry"), row.get("stop"), row.get("target")
     if not entry or not stop or not target:
         raise ValueError("row has no entry / stop / target")
@@ -291,6 +320,8 @@ def _open_trade(row: dict[str, Any], *, risk_inr: float, plan: str) -> dict[str,
         "status": "OPEN",
         "atr": row.get("atr"),
         "plans": [{"plan": plan, "from": None}],
+        "source": "live",
+        "rule_version": RULE_VERSION if strategy_id is None else f"lab:{strategy_id}",
         # Snapshot of why the board picked it, so the reasoning survives
         # after the board changes its mind.
         "decision": {
@@ -402,11 +433,31 @@ def set_plan(trade_id: str, plan: str) -> dict[str, Any]:
             raise ValueError("only open trades can change exit style")
         if current_plan(trade) == plan:
             return trade
+        if not trade.get("strategy_id") and plan not in BOARD_PLANS:
+            raise ValueError("Signal-board trades use fixed exits: over 5 years they beat breakeven and trailing "
+                             "exits (+392R fixed, +246R breakeven, +91R trailing).")
         plans = list(trade.get("plans") or [{"plan": DEFAULT_PLAN, "from": None}])
         plans.append({"plan": plan, "from": expected_session(), "set_at": _now()})
         trade = {**trade, "plans": plans}
         _save(trade)
         return trade
+
+
+def force_fixed_exits() -> int:
+    """Move every open signal-board trade to fixed exits from the next session (stops already
+    tightened stay where they are: a stop never loosens). Returns how many trades changed."""
+    from src.alphadesk.signal_board import expected_session
+
+    moved = 0
+    with _LEDGER_LOCK:
+        for trade in list_trades():
+            if trade.get("status") != "OPEN" or trade.get("strategy_id") or current_plan(trade) in BOARD_PLANS:
+                continue
+            plans = list(trade.get("plans") or [{"plan": DEFAULT_PLAN, "from": None}])
+            plans.append({"plan": "fixed", "from": expected_session(), "set_at": _now(), "by": "audit 21 Nov 2026"})
+            _save({**trade, "plans": plans})
+            moved += 1
+    return moved
 
 
 def _load_open(trade_id: str) -> tuple[Path, dict[str, Any]]:

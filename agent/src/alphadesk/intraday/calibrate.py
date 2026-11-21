@@ -187,7 +187,7 @@ def record_oos(result: dict, risk_inr: float = DEFAULT_RISK_INR) -> dict:
         record_outcome(sid, {"engine_id": ENGINE_ID, "r_multiple": t["r_net"], "pnl_inr": pnl,
                              "symbol": t["symbol"], "source": "intraday_backtest_oos",
                              "notes": f"{t['reason']} {t['date']}"})
-        apply_outcome_to_engine(ENGINE_ID, r_multiple=t["r_net"], pnl_inr=pnl)
+        apply_outcome_to_engine(ENGINE_ID, r_multiple=t["r_net"], pnl_inr=pnl, replay=True)
         seen.add(key)
         n += 1
     path.write_text(json.dumps(sorted(seen)))

@@ -45,7 +45,17 @@ BUILTINS = ("signal_board", "intraday", "btst")
 DEFAULT_COST_PCT = 0.25  # round trip, % of price (same as the P7 exit test)
 MAX_SYMBOLS = 100
 MAX_CONDITIONS = 6
-MIN_TRADES_FOR_GATE = 30
+MIN_TRADES_FOR_GATE = 100  # audit 21 Nov 2026, rule 2 (was 30: too few to tell an edge from luck)
+MAX_VARIATIONS = 45  # past this many tests on the same data a "winner" is likely luck (Bailey & Lopez de Prado)
+
+
+def trimmed_check(pct: list[float]) -> dict[str, Any]:
+    """Still profitable without its best 5% of trades? (One lucky month must not carry a strategy.)"""
+    xs = sorted(pct)
+    k = max(1, int(round(len(xs) * 0.05))) if xs else 0
+    rest = xs[:-k] if k else xs
+    avg = round(float(np.mean(rest)), 3) if rest else None
+    return {"label": "Still profitable without its best 5% of trades", "ok": bool(avg is not None and avg > 0), "value": avg}
 
 
 class StrategyError(ValueError):
@@ -373,6 +383,7 @@ def backtest(bars: dict[str, pd.DataFrame], rules: dict[str, Any], cost_pct: flo
         {"label": "Last 30% of trades profitable", "ok": holdout.get("avg_pct", 0) > 0, "value": holdout.get("avg_pct")},
         {"label": "Beats the same exits on random entry days", "ok": main["avg_pct"] > rnd.get("avg_pct", float("inf")),
          "value": [main["avg_pct"], rnd.get("avg_pct")]},
+        trimmed_check(pct),
     ]
     out["gate"] = {"passed": all(ch["ok"] for ch in checks), "checks": checks}
     cum = np.cumsum(pct)
@@ -484,8 +495,19 @@ def set_paper(strategy_id: str, on: bool) -> dict[str, Any]:
                 raise StrategyError("Test it on past prices once before paper trading it.")
             if c.get("archived"):
                 raise StrategyError("This strategy is archived.")
-        data["switches"].setdefault(strategy_id, {})["paper"] = bool(on)
-        data["switches"][strategy_id]["changed_at"] = _now()
+        sw = data["switches"].setdefault(strategy_id, {})
+        paused = sw.get("auto_paused")
+        if on and paused:
+            since = str(paused.get("at") or "")
+            fresh = [t for t in data["tests"].get(strategy_id) or []
+                     if str(t.get("ran_at") or "") > since and (t.get("gate") or {}).get("passed")]
+            if not fresh:
+                raise StrategyError(f"Paused: {paused.get('reason')} Run a past-prices test; it can restart once "
+                                    "a test run after the pause passes the gate.")
+            sw.pop("auto_paused", None)
+            sw["restarted_after"] = {"pause": paused, "test_ran_at": fresh[-1].get("ran_at")}
+        sw["paper"] = bool(on)
+        sw["changed_at"] = _now()
         _save(data)
     return {"id": strategy_id, "paper": bool(on)}
 
@@ -553,6 +575,8 @@ def record_test(sid: str, result: dict[str, Any], years: int) -> None:
         data = _load()
         data["tests"].setdefault(sid, []).append(keep)
         data["tests"][sid] = data["tests"][sid][-5:]
+        sw = data["switches"].setdefault(sid, {})
+        sw["tests_total"] = int(sw.get("tests_total") or 0) + 1  # every variation counts, not just the kept five
         _save(data)
 
 
@@ -648,7 +672,8 @@ def paper_scan(sid: str, *, loader: Callable[[list[str], int], dict[str, pd.Data
                "reasons": describe(rules)[:1], "cautions": [], "score": None}
         try:
             with bp._LEDGER_LOCK:
-                t = bp._open_trade(row, risk_inr=float(risk_inr or bp.DEFAULT_RISK_INR), plan=bp.DEFAULT_PLAN)
+                t = bp._open_trade(row, risk_inr=float(risk_inr or bp.DEFAULT_RISK_INR), plan=bp.DEFAULT_PLAN,
+                                   strategy_id=sid)
                 t["strategy_id"] = sid
                 t["strategy_name"] = rec["name"]
                 bp._save(t)
@@ -694,6 +719,7 @@ def start_scheduler() -> bool:
 
     def loop() -> None:
         last_day = None
+        last_week = None
         while True:
             try:
                 now = datetime.now(IST)
@@ -701,7 +727,20 @@ def start_scheduler() -> bool:
 
                 if (now.hour, now.minute) >= (15, 45) and last_day != now.date() and cal.is_trading_day(now.date()):
                     last_day = now.date()
+                    from src.alphadesk import health
+
+                    # The kill switch first, so a strategy it pauses opens nothing today.
+                    paused = [f"{p}:{r['id']}" for p, rows in health.check_all_profiles().items()
+                              for r in rows if r.get("action") == "paused"]
+                    logger.info("kill switch: %s", paused or "nothing paused")
                     logger.info("strategy lab paper scans: %s", scan_all_profiles(now))
+                if now.weekday() == 5 and now.hour >= 10 and last_week != now.date():
+                    last_week = now.date()
+                    from src.alphadesk import health, profiles
+
+                    for pid in profiles.all_ids():
+                        with profiles.use(pid):
+                            logger.info("weekly audit %s: %s", pid or "owner", health.weekly()["flags"])
             except Exception as exc:  # noqa: BLE001
                 logger.warning("strategy scheduler tick failed: %s", exc)
             time.sleep(60)
@@ -739,10 +778,12 @@ def _ledger_stats(trades: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _intraday_stats() -> dict[str, Any]:
+    """Live days only. Replayed and backfilled days are tests, shown apart (``health.records``)."""
     try:
+        from src.alphadesk.health import day_source
         from src.alphadesk.intraday import days
 
-        recs = [r for r in days._records(newest_first=False) if r.get("status") == "settled"]
+        recs = [r for r in days._records(newest_first=False) if r.get("status") == "settled" and day_source(r) == "live"]
     except Exception:  # noqa: BLE001
         return {"trades": 0}
     pcts, dates, pnl = [], [], 0.0
@@ -890,7 +931,8 @@ def _entries_for_profile(pid: str | None, owner_name: str) -> list[dict[str, Any
 
     entries.append(base("signal_board", "Signal board (swing, 4-vote)", "built-in",
                         rules_text=["3+ of 4 votes agree: trend, structure, momentum, Kronos forecast",
-                                    "Stop 1.5x ATR, target 3x ATR, closes after 20 trading days"],
+                                    "Longs only (shorts lost -326R over 5 years; switched off 21 Nov 2026)",
+                                    "Fixed exits: stop 1.5x ATR, target 3x ATR, closes after 20 trading days"],
                         paper_stats=_ledger_stats(_board_trades(None)), source="AlphaDesk"))
     entries.append(base("intraday", "Intraday opening-range breakout", "built-in",
                         rules_text=["Opening-range breakout on the day's scan list", "Squared off by the close"],
@@ -913,6 +955,18 @@ def _entries_for_profile(pid: str | None, owner_name: str) -> list[dict[str, Any
             e["last_test"] = {k: tests[-1].get(k) for k in ("summary", "gate", "ran_at", "years")} if tests else None
             e["tests_run"] = len(tests)
         e["gate"] = live_gate(e)
+        sw = data["switches"].get(e["id"]) or {}
+        e["auto_paused"] = sw.get("auto_paused")
+        e["tests_total"] = max(int(sw.get("tests_total") or 0), int(e.get("tests_run") or 0))
+        e["max_variations"] = MAX_VARIATIONS
+        try:
+            from src.alphadesk import health
+
+            e["health"] = health.strategy_health(e["id"])
+            if e["id"] == "signal_board":
+                e["kronos"] = health.kronos_split()
+        except Exception:  # noqa: BLE001
+            logger.warning("health for %s unavailable", e["id"], exc_info=True)
     return entries
 
 

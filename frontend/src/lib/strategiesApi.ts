@@ -57,6 +57,30 @@ export interface TestResult {
   sessions?: number;
 }
 
+export interface HealthSummary {
+  trades: number;
+  unit: "R" | "%";
+  total: number;
+  avg: number | null;
+  win_rate: number | null;
+  pnl_inr: number | null;
+  first: string | null;
+  last: string | null;
+}
+
+export interface Health {
+  live: HealthSummary;
+  replay: HealthSummary;
+  verdict: { status: "collecting" | "ok" | "pause"; reason: string; n: number; basis?: string };
+  rule: string;
+}
+
+export interface KronosRow extends HealthSummary {
+  vote: string;
+  label: string;
+  by_side: { LONG: HealthSummary; SHORT: HealthSummary };
+}
+
 export interface StrategyRow {
   id: string;
   name: string;
@@ -80,6 +104,12 @@ export interface StrategyRow {
   gate: GateCheck[];
   last_scan?: { at: string; opened: number } | null;
   status?: string;
+  /** Switched off by the kill switch or the 21 Nov 2026 audit; restarts after a new passing test. */
+  auto_paused?: { at: string; reason: string; by: string } | null;
+  health?: Health;
+  kronos?: KronosRow[];
+  tests_total?: number;
+  max_variations?: number;
 }
 
 export interface Catalogue {

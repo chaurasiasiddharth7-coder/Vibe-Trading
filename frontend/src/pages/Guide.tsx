@@ -407,11 +407,14 @@ function IdeaCard({
         <div className="mt-auto pt-1">
           <button
             type="button"
-            disabled={openTrade || busy}
+            disabled={openTrade || busy || row.side === "SHORT"}
             onClick={() => onPractice(row)}
             className="min-h-10 w-full rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50 disabled:hover:bg-emerald-600"
+            title={row.side === "SHORT" ? "Short ideas lost money over 5 years (-326R); practice trades are buy-only since 21 Nov 2026." : undefined}
           >
-            {openTrade ? "Practice trade already open" : busy ? "Opening…" : "Practice with fake money"}
+            {row.side === "SHORT"
+              ? "Shorts are off (they lost over 5 years)"
+              : openTrade ? "Practice trade already open" : busy ? "Opening…" : "Practice with fake money"}
           </button>
         </div>
       )}
@@ -702,7 +705,7 @@ export function Guide({
         name: row.name,
         industry: row.industry,
         universe: prefs.universe,
-        plan: prefs.exitPlan,
+        plan: "fixed", // fixed exits only since the 21 Nov 2026 audit (best in the 5-year test)
       });
       setNote(
         `Practice trade opened: ${res.trade.side === "LONG" ? "buy" : "short"} ${res.trade.qty} ${symbol} at ${inr(res.trade.entry)}. It closes by itself at take-profit, cut-loss, or after 20 trading days.`,
@@ -930,7 +933,8 @@ export function Guide({
             <label className="space-y-1 block">
               <span className="block text-sm">How to exit trades</span>
               <select
-                value={prefs.exitPlan}
+                value="fixed"
+                disabled
                 onChange={(e) => update({ exitPlan: e.target.value as ExitPlan })}
                 className="h-10 w-full max-w-sm rounded-md border border-border bg-background px-3 text-sm"
               >
@@ -942,8 +946,8 @@ export function Guide({
               </select>
             </label>
             <p className="text-xs text-muted-foreground">
-              {EXIT_PLANS.find((p) => p.key === prefs.exitPlan)?.explain} Used for new practice trades. You can change it
-              on an open trade too.
+              {EXIT_PLANS.find((p) => p.key === "fixed")?.explain} Since the 21 Nov 2026 audit every practice trade uses
+              fixed exits: in the 5-year test they beat breakeven and trailing exits.
             </p>
             {board?.history?.plans && (
               <div className="overflow-x-auto">
@@ -970,7 +974,7 @@ export function Guide({
                         ...EXIT_PLANS.map((q) => board.history?.plans?.[q.key]?.long.avg_r ?? -9),
                       );
                       return (
-                        <tr key={p.key} className={cn(p.key === prefs.exitPlan && "bg-muted/60")}>
+                        <tr key={p.key} className={cn(p.key === "fixed" && "bg-muted/60")}>
                           <td className="pr-4 py-1">{p.label}</td>
                           <td
                             className={cn(

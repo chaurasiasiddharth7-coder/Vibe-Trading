@@ -114,6 +114,8 @@ def scorecard_row(state: dict[str, Any]) -> dict[str, Any]:
             else (round(pf, 4) if pf != float("inf") else None)
         ),
         "profit_factor_inf": pf == float("inf"),
+        "replay": state.get("replay"),
+        "death_reason": state.get("death_reason"),
         "live_unlock_eligible": bool(
             n >= MIN_TRADES_FOR_DEATH
             and exp is not None
@@ -128,11 +130,27 @@ def apply_outcome_to_engine(
     *,
     r_multiple: float,
     pnl_inr: float,
+    replay: bool = False,
 ) -> dict[str, Any]:
-    """Update sleeve + stats; mark DEAD if sleeve depleted or expectancy ≤ 0 at N≥30."""
+    """Update sleeve + stats; mark DEAD if the sleeve is gone, or after 30+ trades the average R is below
+    zero with 95% confidence (the desk's one kill-switch rule, see ``health.judge``).
+
+    A DEAD engine keeps counting: its record must stay true even while it is switched off (until
+    21 Nov 2026 a dead engine stopped updating, so the signal board's record froze at 30 trades)."""
+    from src.alphadesk.health import judge
+
     state = load_engine(engine_id)
-    if state.get("status") == "DEAD":
+    if replay:
+        # Backtest replays are tests, not a track record: kept beside the live stats, never mixed in.
+        rp = state.setdefault("replay", {"trades": 0, "sum_r": 0.0, "pnl_inr": 0.0})
+        rp["trades"] = int(rp["trades"]) + 1
+        rp["sum_r"] = round(float(rp["sum_r"]) + float(r_multiple), 4)
+        rp["pnl_inr"] = round(float(rp["pnl_inr"]) + float(pnl_inr), 2)
+        save_engine(state)
         return state
+    was_dead = state.get("status") == "DEAD"
+    state.setdefault("r_list", [])
+    state["r_list"] = [*state["r_list"], round(float(r_multiple), 4)][-500:]
 
     state["closed_trades"] = int(state.get("closed_trades") or 0) + 1
     state["sum_r"] = float(state.get("sum_r") or 0) + float(r_multiple)
@@ -148,12 +166,16 @@ def apply_outcome_to_engine(
 
     n = int(state["closed_trades"])
     exp = expectancy_r(state)
-    if state["sleeve_inr"] <= 0:
+    verdict = judge(state["r_list"], MIN_TRADES_FOR_DEATH)
+    if was_dead:
+        pass  # only a person revives an engine (reset_engine); the stats above still update
+    elif state["sleeve_inr"] <= 0:
         state["status"] = "DEAD"
         state["death_reason"] = "sleeve_depleted"
-    elif n >= MIN_TRADES_FOR_DEATH and exp is not None and exp <= 0:
+    elif verdict["status"] == "pause":
         state["status"] = "DEAD"
-        state["death_reason"] = "expectancy_non_positive"
+        state["death_reason"] = "losing_with_95pct_confidence"
+        state["death_note"] = verdict["reason"]
     elif n >= 10 and exp is not None and exp <= 0:
         state["status"] = "PROBATION"
     elif state.get("status") == "PROBATION" and exp is not None and exp > 0:
@@ -161,6 +183,50 @@ def apply_outcome_to_engine(
 
     save_engine(state)
     return state
+
+
+def rebuild_engine(engine_id: str, outcomes: list[tuple[float, float]]) -> dict[str, Any]:
+    """Recompute an engine from its full ledger ``[(r, pnl_inr), ...]`` under the current rule."""
+    state = default_engine_state(engine_id)
+    save_engine(state)
+    for r, pnl in outcomes:
+        apply_outcome_to_engine(engine_id, r_multiple=r, pnl_inr=pnl)
+    return load_engine(engine_id)
+
+
+REPLAY_SOURCES = {"backtest_paper", "intraday_backtest_oos"}
+
+
+def split_replays_from_outcomes() -> list[str]:
+    """One-off repair: engines whose recorded outcomes came from backtest replays get those moved
+    to their ``replay`` block, and their live stats rebuilt from live outcomes only."""
+    from src.alphadesk.store import alphadesk_root
+
+    by_engine: dict[str, list[dict[str, Any]]] = {}
+    for p in (alphadesk_root() / "outcomes").glob("*.json"):
+        try:
+            o = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if o.get("engine_id") and o.get("r_multiple") is not None:
+            by_engine.setdefault(str(o["engine_id"]), []).append(o)
+    fixed = []
+    for eid, outs in by_engine.items():
+        if eid == "signal_board" or not any(o.get("source") in REPLAY_SOURCES for o in outs):
+            continue
+        outs.sort(key=lambda o: str(o.get("recorded_at") or o.get("created_at") or ""))
+        status = load_engine(eid).get("status")
+        live = [(float(o["r_multiple"]), float(o.get("pnl_inr") or 0)) for o in outs if o.get("source") not in REPLAY_SOURCES]
+        state = rebuild_engine(eid, live)
+        for o in outs:
+            if o.get("source") in REPLAY_SOURCES:
+                state = apply_outcome_to_engine(eid, r_multiple=float(o["r_multiple"]),
+                                                pnl_inr=float(o.get("pnl_inr") or 0), replay=True)
+        if status == "DEAD" and state.get("status") != "DEAD":
+            state["status"], state["death_reason"] = "DEAD", "revived only by a person"
+            save_engine(state)
+        fixed.append(f"{eid}: {len(live)} live, {len(outs) - len(live)} replay")
+    return fixed
 
 
 def reset_engine(engine_id: str, *, sleeve_inr: float = DEFAULT_SLEEVE_INR) -> dict[str, Any]:
