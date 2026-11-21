@@ -134,6 +134,8 @@ def ledger_requests(capital: Decimal, s: dict[str, Any], rows: list[dict] | None
         if qty < 1:
             continue
         strategy = "lab" if t.get("strategy_id") else "signal_board"
+        if strategy == "signal_board" and t.get("side") != "LONG":
+            continue  # signal board is longs only since the 21 Nov 2026 audit (shorts lost -326R over 5 years)
         out.append((f"ledger:{t.get('_where', 'local')}:{t['id']}", {
             "strategy": strategy, "symbol": t["symbol"], "side": t["side"], "qty": qty, "carry": True,
             "stop": stop, "target": target, "source": t.get("strategy_name") or "signal board",

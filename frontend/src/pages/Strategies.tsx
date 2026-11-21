@@ -11,6 +11,9 @@ import {
   type Catalogue,
   type Condition,
   type GateCheck,
+  type Health,
+  type HealthSummary,
+  type KronosRow,
   type Rules,
   type StrategyRow,
   type TestResult,
@@ -150,6 +153,9 @@ export function Strategies() {
                       {isOwner && ` · ${r.profile_name}`}
                       {r.rules_text?.[0] ? ` · ${r.rules_text[0].slice(0, 80)}${r.rules_text[0].length > 80 ? "…" : ""}` : ""}
                     </div>
+                    {r.auto_paused && (
+                      <div className="mt-0.5 text-xs text-red-700 dark:text-red-400">Paused by the {r.auto_paused.by}: {r.auto_paused.reason}</div>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-end font-mono tabular-nums whitespace-nowrap">
                     <TrackCell s={r.paper_stats} />
@@ -223,6 +229,81 @@ export function Strategies() {
         />
       )}
     </Page>
+  );
+}
+
+const num = (v: number | null | undefined, unit: string) =>
+  v === null || v === undefined ? "—" : `${v > 0 ? "+" : ""}${unit === "R" ? v.toFixed(2) + "R" : v.toFixed(2) + "%"}`;
+
+const VERDICT_TEXT: Record<string, string> = { collecting: "Collecting", ok: "No proof it loses", pause: "Losing: pause" };
+
+function HealthView({ h }: { h: Health }) {
+  const line = (label: string, s: HealthSummary) => (
+    <tr className="border-t border-border">
+      <td className="px-2 py-1">{label}</td>
+      <td className="px-2 py-1 text-end font-mono tabular-nums">{s.trades}</td>
+      <td className={cn("px-2 py-1 text-end font-mono tabular-nums", tone(s.total))}>{s.trades ? num(s.total, s.unit) : "—"}</td>
+      <td className={cn("px-2 py-1 text-end font-mono tabular-nums", tone(s.avg))}>{num(s.avg, s.unit)}</td>
+      <td className="px-2 py-1 text-end font-mono tabular-nums">{s.win_rate === null ? "—" : `${Math.round(s.win_rate * 100)}%`}</td>
+    </tr>
+  );
+  return (
+    <section className="space-y-1">
+      <h3 className="text-sm font-semibold">Live vs replay</h3>
+      <table className="w-full text-xs">
+        <thead className="text-muted-foreground">
+          <tr>
+            <th className="text-start font-medium px-2 py-1">Record</th>
+            <th className="text-end font-medium px-2 py-1">Trades</th>
+            <th className="text-end font-medium px-2 py-1">Net</th>
+            <th className="text-end font-medium px-2 py-1">A trade</th>
+            <th className="text-end font-medium px-2 py-1">Won</th>
+          </tr>
+        </thead>
+        <tbody>
+          {line("Live (taken going forward)", h.live)}
+          {line("Replayed past days (tests)", h.replay)}
+        </tbody>
+      </table>
+      <p className={cn("text-xs", h.verdict.status === "pause" ? "text-red-700 dark:text-red-400" : "text-muted-foreground")}>
+        Kill switch: <strong>{VERDICT_TEXT[h.verdict.status] ?? h.verdict.status}</strong> · {h.verdict.reason}
+      </p>
+    </section>
+  );
+}
+
+function KronosView({ rows }: { rows: KronosRow[] }) {
+  return (
+    <section className="space-y-1">
+      <h3 className="text-sm font-semibold">Kronos forecast vote</h3>
+      <table className="w-full text-xs">
+        <thead className="text-muted-foreground">
+          <tr>
+            <th className="text-start font-medium px-2 py-1">Vote</th>
+            <th className="text-end font-medium px-2 py-1">Trades</th>
+            <th className="text-end font-medium px-2 py-1">Net</th>
+            <th className="text-end font-medium px-2 py-1">Longs</th>
+            <th className="text-end font-medium px-2 py-1">Shorts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((k) => (
+            <tr key={k.vote} className="border-t border-border">
+              <td className="px-2 py-1">{k.label}</td>
+              <td className="px-2 py-1 text-end font-mono tabular-nums">{k.trades}</td>
+              <td className={cn("px-2 py-1 text-end font-mono tabular-nums", tone(k.total))}>{k.trades ? num(k.total, k.unit) : "—"}</td>
+              <td className={cn("px-2 py-1 text-end font-mono tabular-nums", tone(k.by_side.LONG.total))}>
+                {k.by_side.LONG.trades ? `${num(k.by_side.LONG.total, k.unit)} (${k.by_side.LONG.trades})` : "—"}
+              </td>
+              <td className={cn("px-2 py-1 text-end font-mono tabular-nums", tone(k.by_side.SHORT.total))}>
+                {k.by_side.SHORT.trades ? `${num(k.by_side.SHORT.total, k.unit)} (${k.by_side.SHORT.trades})` : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-xs text-muted-foreground">Live practice trades only. "Agrees" means the forecast pointed the trade's way.</p>
+    </section>
   );
 }
 
@@ -541,6 +622,21 @@ function StrategyPanel({
           </p>
         )}
       </section>
+
+      {row.auto_paused && (
+        <p role="status" className="rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 p-2 text-sm">
+          <strong>Paused</strong> by the {row.auto_paused.by} on {row.auto_paused.at.slice(0, 10)}. {row.auto_paused.reason} It can restart once a past-prices
+          test run after the pause passes the gate.
+        </p>
+      )}
+      {row.health && <HealthView h={row.health} />}
+      {row.kronos && row.kronos.length > 0 && <KronosView rows={row.kronos} />}
+      {typeof row.tests_total === "number" && row.tests_total > 0 && (
+        <p className={cn("text-xs", row.tests_total > (row.max_variations ?? 45) ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground")}>
+          {row.tests_total} test{row.tests_total === 1 ? "" : "s"} run on this strategy
+          {row.tests_total > (row.max_variations ?? 45) ? `: past ${row.max_variations ?? 45}, a passing result is likely luck` : ""}.
+        </p>
+      )}
 
       {testable && (
         <section className="space-y-2">

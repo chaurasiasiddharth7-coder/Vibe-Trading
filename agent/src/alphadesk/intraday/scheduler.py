@@ -126,7 +126,8 @@ def tick(now: datetime | None = None, runner=run_job) -> list[str]:
         state[kind] = entry
         save_state(state)
         done.append(kind)
-    if not done and now.hour * 60 + now.minute >= hhmm(settings["open_time"]) - 30:
+    if not done and _paper_on("intraday") and now.hour * 60 + now.minute >= hhmm(settings["open_time"]) - 30:
+        # (no catch-up replays while paper trading is off: they'd add days to a strategy that is paused)
         tried = state.setdefault("catchup", {})
         today = now.date().isoformat()
         for d in _recent_unsettled(now):

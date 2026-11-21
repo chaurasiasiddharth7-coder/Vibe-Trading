@@ -160,12 +160,42 @@ def test_plan_switch_applies_only_after_its_session():
 def test_set_plan_rejects_closed_and_unknown(tmp_path, monkeypatch):
     monkeypatch.setattr(board_paper, "_dir", lambda: tmp_path)
     row = {"symbol": "TESTCO", "side": "LONG", "entry": 100.0, "stop": 97.0, "target": 106.0, "as_of": "d0"}
-    trade = board_paper.open_trade(row, plan="trail")
-    assert trade["plans"][0]["plan"] == "trail"
-    updated = board_paper.set_plan(trade["id"], "fixed")
-    assert board_paper.current_plan(updated) == "fixed"
+    monkeypatch.setattr("src.alphadesk.strategies.paper_on", lambda sid: True)
+    with pytest.raises(ValueError, match="fixed exits"):
+        board_paper.open_trade(row, plan="trail")  # audit 21 Nov 2026: signal-board trades use fixed exits
+    trade = board_paper.open_trade(row, plan="fixed")
+    assert trade["plans"][0]["plan"] == "fixed" and trade["source"] == "live" and trade["rule_version"]
+    with pytest.raises(ValueError, match="fixed exits"):
+        board_paper.set_plan(trade["id"], "trail")
     with pytest.raises(ValueError):
         board_paper.set_plan(trade["id"], "nope")
+
+
+def test_board_is_longs_only_and_respects_the_paper_switch(tmp_path, monkeypatch):
+    monkeypatch.setattr(board_paper, "_dir", lambda: tmp_path)
+    short = {"symbol": "SHRT", "side": "SHORT", "entry": 100.0, "stop": 103.0, "target": 94.0, "as_of": "d0"}
+    monkeypatch.setattr("src.alphadesk.strategies.paper_on", lambda sid: True)
+    with pytest.raises(ValueError, match="Short trades are switched off"):
+        board_paper.open_trade(short)
+    monkeypatch.setattr("src.alphadesk.strategies.paper_on", lambda sid: False)
+    with pytest.raises(ValueError, match="switched off on the Strategies page"):
+        board_paper.open_trade({**short, "side": "LONG", "stop": 97.0, "target": 106.0})
+    # lab strategies keep their own side
+    t = board_paper._open_trade(short, risk_inr=1000, plan="fixed", strategy_id="lab_x")
+    assert t["side"] == "SHORT" and t["rule_version"] == "lab:lab_x"
+
+
+def test_force_fixed_exits_moves_open_trailing_trades(tmp_path, monkeypatch):
+    monkeypatch.setattr(board_paper, "_dir", lambda: tmp_path)
+    monkeypatch.setattr("src.alphadesk.signal_board.expected_session", lambda *a, **k: "d5")
+    row = {"symbol": "TESTCO", "side": "LONG", "entry": 100.0, "stop": 97.0, "target": 106.0, "as_of": "d0"}
+    t = board_paper._open_trade(row, risk_inr=1000, plan="trail", strategy_id="lab_y")
+    board_paper._save({**t, "strategy_id": "lab_y"})
+    t2 = {**t, "id": "11111111-1111-1111-1111-111111111111", "symbol": "OTHER"}
+    t2.pop("strategy_id", None)
+    board_paper._save(t2)
+    assert board_paper.force_fixed_exits() == 1  # the board's trade, not the lab one
+    assert board_paper.force_fixed_exits() == 0
 
 
 def test_set_plan_rejects_non_uuid_ids(tmp_path, monkeypatch):

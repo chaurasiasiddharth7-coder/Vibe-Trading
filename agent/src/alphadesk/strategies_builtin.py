@@ -65,6 +65,7 @@ def scorecard(trades: list[dict[str, Any]], *, random_avg: float | None, random_
          "value": [first.get("avg_pct"), second.get("avg_pct")]},
         {"label": "Still profitable at double costs", "ok": double.get("avg_pct", 0) > 0, "value": double.get("avg_pct")},
         {"label": "Last 30% of trades profitable", "ok": holdout.get("avg_pct", 0) > 0, "value": holdout.get("avg_pct")},
+        S.trimmed_check(pct),
     ]
     if random_avg is not None:
         out["robustness"]["random_entries"] = {"trades": main["trades"], "avg_pct": round(random_avg, 3)}

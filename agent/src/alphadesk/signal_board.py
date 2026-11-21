@@ -218,20 +218,27 @@ def _load_kronos(symbol: str) -> dict[str, Any] | None:
 
 
 def track_record() -> dict[str, Any]:
-    from src.alphadesk.survival import load_engine, scorecard_row
+    """The board's record, rebuilt from its own closed practice trades every time (never a cached counter)."""
+    from src.alphadesk.board_paper import list_trades
+    from src.alphadesk.survival import rebuild_engine, scorecard_row
 
-    row = scorecard_row(load_engine(ENGINE_ID))
+    closed = sorted((t for t in list_trades() if t.get("status") == "CLOSED" and not t.get("strategy_id")
+                     and t.get("r_multiple") is not None), key=lambda t: str(t.get("closed_at") or ""))
+    state = rebuild_engine(ENGINE_ID, [(float(t["r_multiple"]), float(t.get("pnl_inr") or 0)) for t in closed])
+    row = scorecard_row(state)
     n = int(row.get("closed_trades") or 0)
     exp = row.get("expectancy_r")
     if n == 0:
         verdict = "untested"
     elif n < 30:
         verdict = "too_few_trades"
+    elif state.get("status") == "DEAD":
+        verdict = "negative"
     elif exp is not None and exp > 0:
         verdict = "positive"
     else:
-        verdict = "negative"
-    return {**row, "verdict": verdict}
+        verdict = "unproven"
+    return {**row, "verdict": verdict, "death_note": state.get("death_note")}
 
 
 def _kronos_available() -> bool:

@@ -74,6 +74,7 @@ def test_runner_buys_the_overnight_pick_with_the_picks_stop(tmp_path, monkeypatc
         ("btst:x:SBIN", {"strategy": "btst", "symbol": "SBIN", "side": "LONG", "qty": 10, "carry": True,
                          "stop": 780.0, "target_pct": 5.0, "source": "overnight pick"})])
     r.bridge.btst_source = B.btst_requests
+    r.bridge.raw_cfg["bridge"]["btst"] = True  # off in the shipped yaml since the audit; the mechanism still works
     p.now["SBIN"] = D("800")
     r.tick(at(15, 21))  # bridge queues
     r.tick(at(15, 21, 10))  # runner reads the inbox, sends the paper entry
@@ -102,5 +103,8 @@ def test_runner_refuses_a_handover_already_past_its_stop(tmp_path):
 
 def test_yaml_has_bridge_and_strategy_overrides():
     raw = load_config().raw
-    assert raw["bridge"]["enabled"] and raw["bridge"]["btst"] and raw["bridge"]["signal_board"]
-    assert load_config().for_strategy("signal_board").l1["time_stop_bars"] == 0
+    assert raw["bridge"]["enabled"] and raw["bridge"]["signal_board"]
+    assert raw["bridge"]["btst"] is False  # off since the 21 Nov 2026 audit
+    sb = load_config().for_strategy("signal_board")
+    assert sb.l1["time_stop_bars"] == 0 and sb.l1["trail"] == "none" and sb.l1["scale_out_frac"] == 0
+    assert sb.l2["mode"] == "off" and float(sb.l1["breakeven_at_r"]) > 100

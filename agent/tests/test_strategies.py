@@ -132,9 +132,10 @@ def test_backtest_gate_and_robustness_shape():
     res = S.backtest(bars, rules)
     assert res["summary"]["trades"] > 0
     assert {"first_half", "second_half", "double_costs", "holdout_last_30pct", "random_entries"} <= set(res["robustness"])
-    assert [c["label"] for c in res["gate"]["checks"]][0].startswith("At least 30")
+    assert [c["label"] for c in res["gate"]["checks"]][0].startswith("At least 100")
     assert res["gate"]["passed"] == all(c["ok"] for c in res["gate"]["checks"])
     assert res["robustness"]["double_costs"]["avg_pct"] < res["summary"]["avg_pct"]
+    assert any(c["label"].startswith("Still profitable without its best 5%") for c in res["gate"]["checks"])
 
 
 def test_stats_drawdown_and_profit_factor():

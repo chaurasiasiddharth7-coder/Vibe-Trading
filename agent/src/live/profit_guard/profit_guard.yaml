@@ -56,7 +56,7 @@ executor:
 
 bridge:                       # hands the desk's strategies to the guard (paper): see bridge.py
   enabled: true
-  btst: true                  # today's overnight pick, bought on paper after the 15:20 scan
+  btst: false                 # off since the 21 Nov 2026 audit: BTST loses 0.34% a trade after costs
   signal_board: true          # open "Today's ideas" practice trades, mirrored once each
   risk_per_trade_pct: 0.5     # a stop-out loses at most 0.5% of capital_inr...
   max_position_pct: 20.0      # ...and no position is bigger than 20% of it
@@ -77,11 +77,21 @@ strategies:                   # per-strategy overrides, merged over the sections
     layer1:
       chandelier_atr_k: 3.0
       time_stop_bars: 0
-  signal_board:               # practice trades handed over by the bridge: multi-day swing exits
-    layer1:
-      chandelier_atr_k: 3.0
+  signal_board:               # practice trades handed over by the bridge. Audit 21 Nov 2026: fixed exits
+    layer1:                   # beat breakeven / half-selling / trailing over 5 years (+392R vs +91R trailing),
+      stop_atr_k: 1.5         # so the guard keeps the trade's own stop (1.5x ATR) and target (3x ATR = 2R)
+      target_r: 2.0           # and closes it on those alone; the board ends it after 20 trading days.
+      breakeven_at_r: 999     # never moves the stop to breakeven
+      scale_out_frac: 0.0     # no half-selling at +1R
+      trail: none             # no trailing stop
       time_stop_bars: 0
-  lab:                        # Strategies-page lab trades: same as the signal board
+    layer2:
+      mode: "off"             # no same-day profit lock on multi-day swing trades (the day's loss cap still applies)
+  lab:                        # Strategies-page lab trades: the exits their test used (stop, target, days)
     layer1:
-      chandelier_atr_k: 3.0
+      breakeven_at_r: 999
+      scale_out_frac: 0.0
+      trail: none
       time_stop_bars: 0
+    layer2:
+      mode: "off"

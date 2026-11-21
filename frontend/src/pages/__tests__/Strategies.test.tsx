@@ -151,4 +151,32 @@ describe("Strategies page", () => {
     expect(within(dialog).getByText("412")).toBeInTheDocument();
     expect(within(dialog).getByText(/Backtest gate: passed/)).toBeInTheDocument();
   });
+
+  it("shows a paused strategy's reason, live vs replay, and the Kronos split", async () => {
+    const sum = (trades: number, total: number) => ({ trades, unit: "R" as const, total, avg: trades ? total / trades : null, win_rate: 0.4, pnl_inr: null, first: null, last: null });
+    const paused = row({
+      id: "intraday", name: "Intraday opening-range breakout", paper: false,
+      auto_paused: { at: "2026-11-21T17:00:00+05:30", reason: "Audit 21 Nov 2026: lost every month.", by: "audit" },
+      health: { live: sum(80, -16.6), replay: sum(285, -67.5), verdict: { status: "pause", reason: "365 trades prove it", n: 365 }, rule: "r" },
+    });
+    const board = row({
+      id: "signal_board", name: "Signal board (swing, 4-vote)",
+      kronos: [{ vote: "agrees", label: "Kronos agrees", ...sum(46, 14.9), by_side: { LONG: sum(27, 21.6), SHORT: sum(19, -6.6) } }],
+    });
+    const api = await import("@/lib/strategiesApi");
+    vi.spyOn(api.strategiesApi, "list").mockResolvedValue({ ok: true, data: { ...catalogue, strategies: [paused, board] } });
+    vi.spyOn(api.strategiesApi, "detail").mockResolvedValue({ ok: true, data: { strategy: null, tests: [], paper_trades: [], switch: {} } } as never);
+    const { Strategies } = await import("@/pages/Strategies");
+    render(<Strategies />);
+    expect(await screen.findByText(/Paused by the audit: Audit 21 Nov 2026/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Intraday opening-range breakout" }));
+    let dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Replayed past days (tests)")).toBeInTheDocument();
+    expect(within(dialog).getByText("Losing: pause")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getByRole("button", { name: "Signal board (swing, 4-vote)" }));
+    dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Kronos agrees")).toBeInTheDocument();
+    expect(within(dialog).getByText("+21.60R (27)")).toBeInTheDocument();
+  });
 });
