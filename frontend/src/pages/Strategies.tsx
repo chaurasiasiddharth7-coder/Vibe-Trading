@@ -35,6 +35,7 @@ export function Strategies() {
   const [kind, setKind] = useState("all");
   const [who, setWho] = useState("all");
   const [open, setOpen] = useState<StrategyRow | null>(null);
+  const [autoTest, setAutoTest] = useState(false);
   const [building, setBuilding] = useState<StrategyRow | "new" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [flash, setFlash] = useState("");
@@ -145,7 +146,7 @@ export function Strategies() {
               {shown.map((r) => (
                 <tr key={`${r.profile ?? "owner"}:${r.id}`} className="border-t border-border align-top">
                   <td className="px-3 py-2">
-                    <button type="button" onClick={() => setOpen(r)} className="text-start hover:underline">
+                    <button type="button" onClick={() => { setAutoTest(false); setOpen(r); }} className="text-start hover:underline">
                       <span className="font-semibold">{r.name}</span>
                     </button>
                     <div className="text-xs text-muted-foreground">
@@ -171,6 +172,19 @@ export function Strategies() {
                       <span className="text-muted-foreground">Not tested yet</span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
+                    )}
+                    {(r.kind === "lab" || r.testable) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAutoTest(canEdit);
+                          setOpen(r);
+                        }}
+                        className="mt-1 min-h-8 px-2 rounded-md border border-border text-xs inline-flex items-center gap-1 hover:bg-muted"
+                        aria-label={`Backtest ${r.name} on past prices`}
+                      >
+                        <FlaskConical className="h-3.5 w-3.5" aria-hidden /> Backtest
+                      </button>
                     )}
                   </td>
                   <td className="px-3 py-2 text-center">
@@ -208,7 +222,11 @@ export function Strategies() {
           isOwner={isOwner}
           canEdit={canEdit}
           lockedReason={data?.live_locked_reason ?? ""}
-          onClose={() => setOpen(null)}
+          autoRun={autoTest}
+          onClose={() => {
+            setOpen(null);
+            setAutoTest(false);
+          }}
           onChanged={load}
           onEdit={() => {
             setBuilding(open);
@@ -525,6 +543,7 @@ function StrategyPanel({
   isOwner,
   canEdit,
   lockedReason,
+  autoRun = false,
   onClose,
   onChanged,
   onEdit,
@@ -533,6 +552,8 @@ function StrategyPanel({
   isOwner: boolean;
   canEdit: boolean;
   lockedReason: string;
+  /** Opened from the row's Backtest button: start a test straight away and show it. */
+  autoRun?: boolean;
   onClose: () => void;
   onChanged: () => void;
   onEdit: () => void;
@@ -557,6 +578,23 @@ function StrategyPanel({
   }, [row.id, profile, testable, tr.result]);
 
   const latest = tr.result ?? tests[tests.length - 1] ?? null;
+  const testRef = useRef<HTMLElement | null>(null);
+  const runTest = () =>
+    void tr.run(
+      () =>
+        strategiesApi
+          .test(row.id, years, profile, row.id === "signal_board" ? universe : undefined, intraday ? sessions : undefined)
+          .then((r) => ({ job_id: r.job_id })),
+      profile,
+    );
+  const started = useRef(false);
+  useEffect(() => {
+    if (!autoRun || !testable || started.current) return;
+    started.current = true;
+    testRef.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    if (canEdit) runTest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRun, testable, canEdit]);
   const scan = async () => {
     setMsg("");
     try {
@@ -639,7 +677,7 @@ function StrategyPanel({
       )}
 
       {testable && (
-        <section className="space-y-2">
+        <section ref={testRef} className="space-y-2 scroll-mt-4">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold me-auto">Test on past prices</h3>
             {row.id === "signal_board" && (
@@ -671,15 +709,7 @@ function StrategyPanel({
             <button
               type="button"
               disabled={tr.running || !canEdit}
-              onClick={() =>
-                void tr.run(
-                  () =>
-                    strategiesApi
-                      .test(row.id, years, profile, row.id === "signal_board" ? universe : undefined, intraday ? sessions : undefined)
-                      .then((r) => ({ job_id: r.job_id })),
-                  profile,
-                )
-              }
+              onClick={runTest}
               className="min-h-9 px-3 rounded-md border border-border text-sm inline-flex items-center gap-1 disabled:opacity-60"
             >
               <FlaskConical className="h-4 w-4" aria-hidden />{" "}
