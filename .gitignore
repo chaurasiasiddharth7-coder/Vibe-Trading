@@ -107,3 +107,4 @@ profit_guard_test_result.txt
 # local deploy/PR helpers
 scripts/.deploy_host
 scripts/pr/
+scripts/.chat_*_key
