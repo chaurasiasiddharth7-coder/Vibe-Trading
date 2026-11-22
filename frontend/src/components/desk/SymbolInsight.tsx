@@ -174,6 +174,7 @@ export function SymbolInsight({
             quiet={compact}
             patternMark={mark}
             height={chartHeight}
+            symbol={symbol}
           />
           <AnalysisPanel
             price={data.current_price}
