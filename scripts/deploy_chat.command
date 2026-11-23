@@ -1,5 +1,6 @@
 #!/bin/bash
-# One double-click: your own AI chat (LibreChat + Z.ai GLM) at https://chat.fairscoreguide.com on the VPS.
+# One double-click: your own AI chat (LibreChat) at https://chat.fairscoreguide.com on the VPS.
+# The AI: a free open model on the server when scripts/chat/provider says "ollama", else DeepSeek / Z.ai GLM.
 # Uses the same server login as deploy_all.command (scripts/.deploy_host). Safe to run again: it updates
 # LibreChat and keeps your account, chats and settings.
 set -u
@@ -9,6 +10,7 @@ HOST_FILE="$MAIN/scripts/.deploy_host"
 REMOTE="$MAIN/scripts/chat/remote_setup.sh"
 DOMAIN="chat.fairscoreguide.com"
 PW_FILE="$HOME/Desktop/chat-signin.txt"
+PROVIDER="$(tr -d ' \n' < "$MAIN/scripts/chat/provider" 2>/dev/null)"
 LOG="$MAIN/logs/deploy_chat-$(date +%F-%H%M).log"
 mkdir -p "$MAIN/logs"
 fail() { echo; echo "Stopped: $1"; read -r -p "Press Enter to close."; exit 1; }
@@ -39,7 +41,7 @@ TMP="$(mktemp)"; chmod 600 "$TMP"; trap 'rm -f "$TMP"' EXIT
 # The one-time password line is kept off the screen and out of the log.
 run_remote() {
   ssh "$H" 'cat > /tmp/librechat_setup.sh' < "$REMOTE" || return 1
-  ssh "$H" "CHAT_DOMAIN=$DOMAIN bash /tmp/librechat_setup.sh; rc=\$?; rm -f /tmp/librechat_setup.sh; exit \$rc" 2>&1 \
+  ssh "$H" "CHAT_DOMAIN=$DOMAIN CHAT_PROVIDER=$PROVIDER bash /tmp/librechat_setup.sh; rc=\$?; rm -f /tmp/librechat_setup.sh; exit \$rc" 2>&1 \
     | tee "$TMP" | grep -v '^SIGNIN '
   local rc=${PIPESTATUS[0]}
   grep -v '^SIGNIN ' "$TMP" >> "$LOG"

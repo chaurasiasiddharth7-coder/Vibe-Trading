@@ -1,9 +1,11 @@
 #!/bin/bash
 # Runs ON THE VPS (deploy_chat.command pipes it over ssh). Installs/updates LibreChat in /opt/librechat,
-# connected to Z.ai GLM, listening on 127.0.0.1 only, with Caddy in front for https://$CHAT_DOMAIN.
+# connected to DeepSeek, Z.ai GLM or a free open model running on this server (CHAT_PROVIDER=ollama),
+# listening on 127.0.0.1 only, with Caddy in front for https://$CHAT_DOMAIN.
 # Safe to re-run: keeps existing secrets, users and chats; only fills in what's missing.
 set -u
 CHAT_DOMAIN="${CHAT_DOMAIN:-chat.fairscoreguide.com}"
+CHAT_PROVIDER="${CHAT_PROVIDER:-}"   # "ollama" = free model on this server, no API key
 DIR=/opt/librechat
 SECRETS=/opt/librechat-secrets
 PORT=3080
@@ -65,7 +67,11 @@ say "Secrets in place (kept if they already existed); public sign-up off."
 echo "== AI model key"
 mkdir -p "$SECRETS" && chmod 700 "$SECRETS"
 PROVIDER=""; KEY=""
-if [ -s "$SECRETS/deepseek_key" ]; then
+[ -n "$CHAT_PROVIDER" ] && printf '%s' "$CHAT_PROVIDER" > "$SECRETS/provider"
+[ -s "$SECRETS/provider" ] && [ "$(cat "$SECRETS/provider")" = ollama ] && PROVIDER=ollama
+if [ "$PROVIDER" = ollama ]; then
+  say "Free model on this server: no key needed."
+elif [ -s "$SECRETS/deepseek_key" ]; then
   PROVIDER=deepseek; KEY="$(cat "$SECRETS/deepseek_key")"
 elif [ -s "$SECRETS/zai_key" ]; then
   PROVIDER=glm; KEY="$(cat "$SECRETS/zai_key")"
@@ -76,7 +82,7 @@ else
         | head -1 | sed -E 's/^(export )?[A-Z_]+=//; s/^["'\'']//; s/["'\'']$//')"
   if [ -n "$KEY" ]; then PROVIDER=glm; (umask 077; printf '%s' "$KEY" > "$SECRETS/zai_key"); say "Found the GLM key your agents use on this server."; fi
 fi
-[ -n "$KEY" ] || { echo "NEED_KEY"; exit 3; }
+[ -n "$KEY" ] || [ "$PROVIDER" = ollama ] || { echo "NEED_KEY"; exit 3; }
 
 works() {  # works BASE MODEL -> 0 if a tiny chat request succeeds
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$1/chat/completions" \
@@ -85,7 +91,14 @@ works() {  # works BASE MODEL -> 0 if a tiny chat request succeeds
 }
 
 BASE=""; MODELS=()
-if [ "$PROVIDER" = deepseek ]; then
+if [ "$PROVIDER" = ollama ]; then
+  echo "== Free open model (Ollama on this server)"
+  mem=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+  # Qwen 2.5 3B: about 2 GB, runs on CPU. Smaller servers get the 1.5B version.
+  OLLAMA_MODEL="${OLLAMA_MODEL:-$( [ "${mem:-0}" -ge 6000 ] && echo qwen2.5:3b || echo qwen2.5:1.5b )}"
+  BASE="http://ollama:11434/v1"; MODELS=("$OLLAMA_MODEL"); ENV_NAME=""; LABEL="Free model"
+  say "Server memory ${mem} MB -> $OLLAMA_MODEL"
+elif [ "$PROVIDER" = deepseek ]; then
   echo "== Which DeepSeek models answer with this key"
   BASE=https://api.deepseek.com/v1
   ids=$(curl -s --max-time 30 "$BASE/models" -H "Authorization: Bearer $KEY" \
@@ -116,6 +129,8 @@ say "Provider: $LABEL ($BASE)"
 say "Models: ${MODELS[*]}"
 list=$(printf '"%s", ' "${MODELS[@]}"); list="[${list%, }]"
 
+if [ "$PROVIDER" = ollama ]; then APIKEY='"ollama"'; EXTRA='      dropParams: ["stop", "user", "frequency_penalty", "presence_penalty"]'
+else APIKEY="\"\${$ENV_NAME}\""; EXTRA=""; fi
 cat > librechat.yaml <<YAML
 # Written by deploy_chat.command. Re-running it rewrites this file.
 version: 1.2.1
@@ -123,7 +138,7 @@ cache: true
 endpoints:
   custom:
     - name: "$LABEL"
-      apiKey: "\${$ENV_NAME}"
+      apiKey: $APIKEY
       baseURL: "$BASE"
       models:
         default: $list
@@ -132,6 +147,7 @@ endpoints:
       titleModel: "current_model"
       summarize: false
       modelDisplayLabel: "$LABEL"
+$EXTRA
 YAML
 
 cat > docker-compose.override.yml <<'YAML'
@@ -145,15 +161,45 @@ services:
         source: ./librechat.yaml
         target: /app/librechat.yaml
 YAML
+if grep -q '^  admin-panel:' docker-compose.yml 2>/dev/null; then
+  # LibreChat's optional admin panel wants port 3000, which this server already uses: keep it off.
+  cat >> docker-compose.override.yml <<'YAML'
+  admin-panel:
+    profiles: ["admin-panel"]
+YAML
+fi
+if [ "$PROVIDER" = ollama ]; then
+  cat >> docker-compose.override.yml <<'YAML'
+  ollama:                      # the free model, reachable only by LibreChat (no port opened)
+    image: ollama/ollama:latest
+    container_name: LibreChat-Ollama
+    restart: always
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_NUM_PARALLEL=1
+    volumes:
+      - ollama:/root/.ollama
+volumes:
+  ollama:
+YAML
+fi
 
 echo "== Starting LibreChat (first time downloads a few images)"
 docker compose pull -q </dev/null 2>/dev/null || true
-docker compose up -d </dev/null || die "docker compose up failed (see above)."
+docker rm -f admin-panel >/dev/null 2>&1 || true   # left over from a run before the panel was switched off
+docker compose up -d --remove-orphans </dev/null || die "docker compose up failed (see above)."
 for i in $(seq 1 60); do
   c=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/") ; [ "$c" = 200 ] && break; sleep 3
 done
 [ "$c" = 200 ] || die "LibreChat didn't answer on 127.0.0.1:$PORT (try: cd $DIR && docker compose logs api | tail -50)."
 say "LibreChat is running."
+if [ "$PROVIDER" = ollama ]; then
+  echo "== Downloading the free model ($OLLAMA_MODEL, about 2 GB the first time)"
+  timeout 1800 docker compose exec -T ollama ollama pull "$OLLAMA_MODEL" </dev/null >/tmp/ollama_pull.log 2>&1 \
+    || { tail -3 /tmp/ollama_pull.log; die "Couldn't download the model."; }
+  ans=$(timeout 300 docker compose exec -T ollama ollama run "$OLLAMA_MODEL" "Reply with the single word: ready" </dev/null 2>/dev/null | head -c 80)
+  [ -n "$ans" ] && say "Model answers: $ans" || say "Model downloaded (first answer can take a minute)."
+fi
 
 echo "== Your sign-in"
 EMAIL="sid@${CHAT_DOMAIN#chat.}"
@@ -203,5 +249,60 @@ else
   say "No Caddy at /etc/caddy on this server. Found instead:"
   docker ps --format '   {{.Names}}  {{.Image}}  {{.Ports}}' | grep -iE 'caddy|nginx|traefik|proxy' || say "(no proxy container)"
   echo "NO_CADDY"
+fi
+# This server's Caddy has automatic HTTPS switched off; the desk gets its certificate from certbot
+# (webroot /var/www/acme). Do the same for the chat: an HTTP block for the challenge, a certbot
+# certificate copied to /etc/caddy/certs/chat.*, renewed by certbot's timer with a hook.
+if [ -f /etc/caddy/Caddyfile ] && grep -qE '^\s*auto_https off' /etc/caddy/Caddyfile && command -v certbot >/dev/null; then
+  echo "== HTTPS certificate for $CHAT_DOMAIN (certbot, same way as the desk)"
+  CF=/etc/caddy/Caddyfile; WEBROOT=/var/www/acme; mkdir -p "$WEBROOT"
+  HOOK=/etc/letsencrypt/renewal-hooks/deploy/caddy-chat.sh
+  mkdir -p "$(dirname "$HOOK")"
+  cat > "$HOOK" <<HK
+#!/bin/sh
+# Copy the chat certificate where Caddy reads it, after certbot gets or renews it.
+case " \$RENEWED_DOMAINS " in *" $CHAT_DOMAIN "*) ;; *) exit 0 ;; esac
+install -o caddy -g caddy -m 644 "\$RENEWED_LINEAGE/fullchain.pem" /etc/caddy/certs/chat.crt
+install -o caddy -g caddy -m 600 "\$RENEWED_LINEAGE/privkey.pem" /etc/caddy/certs/chat.key
+systemctl reload caddy
+HK
+  chmod 755 "$HOOK"
+  changed=no
+  if ! grep -q "^http://$CHAT_DOMAIN" "$CF"; then
+    cp "$CF" "$CF.bak-chat-http-$(date +%s)"
+    printf '\nhttp://%s {\n\thandle /.well-known/acme-challenge/* {\n\t\troot * %s\n\t\tfile_server\n\t}\n\thandle {\n\t\tredir https://%s{uri} permanent\n\t}\n}\n' \
+      "$CHAT_DOMAIN" "$WEBROOT" "$CHAT_DOMAIN" >> "$CF"
+    changed=yes
+  fi
+  if [ $changed = yes ]; then
+    caddy validate --config "$CF" --adapter caddyfile >/tmp/caddy_v.log 2>&1 \
+      && systemctl reload caddy || { tail -5 /tmp/caddy_v.log; cp "$(ls -t "$CF".bak-chat-http-* | head -1)" "$CF"; die "Caddy didn't accept the challenge block; old config put back."; }
+  fi
+  if [ ! -s /etc/caddy/certs/chat.crt ]; then
+    certbot certonly --webroot -w "$WEBROOT" -d "$CHAT_DOMAIN" --non-interactive --keep-until-expiring \
+      --deploy-hook "$HOOK" >/tmp/certbot_chat.log 2>&1 \
+      || { tail -8 /tmp/certbot_chat.log; die "certbot couldn't get a certificate for $CHAT_DOMAIN (see above)."; }
+    [ -s /etc/caddy/certs/chat.crt ] || RENEWED_DOMAINS="$CHAT_DOMAIN" RENEWED_LINEAGE="/etc/letsencrypt/live/$CHAT_DOMAIN" sh "$HOOK"
+    say "Certificate issued by Let's Encrypt; certbot renews it with the desk's."
+  else
+    say "Certificate already in place."
+  fi
+  if ! awk -v d="$CHAT_DOMAIN {" '$0==d{f=1} f&&/^}/{f=0} f' "$CF" | grep -q 'tls /etc/caddy/certs/chat.crt'; then
+    cp "$CF" "$CF.bak-chat-tls-$(date +%s)"
+    python3 - "$CF" "$CHAT_DOMAIN" <<'PY'
+import sys
+cf, dom = sys.argv[1], sys.argv[2]
+s = open(cf).read()
+head = f"\n{dom} {{\n"
+i = s.find(head)
+if i >= 0:
+    j = i + len(head)
+    s = s[:j] + "\ttls /etc/caddy/certs/chat.crt /etc/caddy/certs/chat.key\n" + s[j:]
+    open(cf, "w").write(s)
+PY
+    caddy validate --config "$CF" --adapter caddyfile >/tmp/caddy_v.log 2>&1 \
+      && systemctl reload caddy && say "Caddy now serves https://$CHAT_DOMAIN with that certificate." \
+      || { tail -5 /tmp/caddy_v.log; cp "$(ls -t "$CF".bak-chat-tls-* | head -1)" "$CF"; die "Caddy didn't accept the certificate; old config put back."; }
+  fi
 fi
 echo "DONE"
