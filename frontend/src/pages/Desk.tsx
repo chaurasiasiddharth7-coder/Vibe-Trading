@@ -560,6 +560,8 @@ export function Desk({ embedded = false }: { embedded?: boolean } = {}) {
                 target={row?.target ?? tradePlan?.target_price}
                 stopLoss={row?.stop ?? tradePlan?.stop_loss}
                 levels={brLevels}
+                symbol={analysis.symbol}
+                showVolume
               />
             </>
           )}

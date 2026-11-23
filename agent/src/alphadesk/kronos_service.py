@@ -114,11 +114,18 @@ def forecast_symbol(
     temperature: float = 0.8,
     top_p: float = 0.9,
     sample_count: int = 5,
+    as_of: str | None = None,
+    record: bool = True,
 ) -> dict[str, Any]:
-    """Run Kronos autoregressive forecast for an India ticker."""
+    """Run Kronos autoregressive forecast for an India ticker.
+
+    ``as_of`` (YYYY-MM-DD) forecasts from the bars up to that day only, as Kronos would have that day.
+    Daily forecasts are saved to ``kronos_log`` so the chart can show what Kronos predicted."""
     ticker = normalize_india_symbol(symbol)
     lookback = min(lookback, DEFAULT_MAX_CONTEXT)
     _, df = fetch_india_ohlcv(ticker, period=period, interval=interval)
+    if as_of is not None:
+        df = df[pd.to_datetime(df.index).strftime("%Y-%m-%d") <= as_of]
     if len(df) < lookback:
         raise LookupError(
             f"insufficient history for {ticker}: need {lookback} bars, got {len(df)}"
@@ -196,7 +203,7 @@ def forecast_symbol(
     projected_high = max(c["high"] for c in projected)
     projected_low = min(c["low"] for c in projected)
 
-    return {
+    out = {
         "symbol": ticker.replace(".NS", "").replace(".BO", ""),
         "ticker": ticker,
         "current_price": current_price,
@@ -212,3 +219,11 @@ def forecast_symbol(
         "historical_data": historical[-120:],
         "forecast_data": projected,
     }
+    if record and interval.lower() == "1d" and as_of is None:
+        try:
+            from src.alphadesk import kronos_log
+
+            kronos_log.record(out["symbol"], out)
+        except Exception:  # noqa: BLE001 - saving the forecast must never break it
+            logger.warning("kronos forecast for %s not saved", ticker, exc_info=True)
+    return out

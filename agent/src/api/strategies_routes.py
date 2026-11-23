@@ -11,6 +11,9 @@
     GET   /api/desk/strategies/jobs/{job_id}
     POST  /api/desk/strategies/{id}/scan-now       run today's paper scan for a lab strategy
     POST  /api/desk/strategies/import              {text?, url?} -> drafted rules to review (owner only: uses the AI model)
+    GET   /api/desk/chart/strategies               strategies the chart can overlay (id, label, colour)
+    GET   /api/desk/chart/signals?symbol=&ids=a,b  what each strategy predicted on that stock, and what happened
+    GET   /api/desk/kronos/backfill                progress of the past-forecast backfill for the watchlist
     GET   /api/desk/health                         the kill switch's verdict per strategy, live vs replay, Kronos split
     POST  /api/desk/health/check                   run the kill switch now (owner: every profile)
     GET   /api/desk/health/weekly                  the last weekly audit (?run=1 makes a fresh one)
@@ -163,6 +166,37 @@ def register_strategies_routes(app: FastAPI, require_auth: AuthDep) -> None:
             except S.StrategyError as exc:
                 raise bad(exc) from exc
 
+    @app.get("/api/desk/chart/strategies", dependencies=[Depends(require_auth)])
+    def chart_strategies() -> dict[str, Any]:
+        from src.alphadesk import chart_signals
+
+        return {"ok": True, "data": chart_signals.options()}
+
+    @app.get("/api/desk/chart/signals", dependencies=[Depends(require_auth)])
+    def chart_signal_lines(symbol: str = Query(..., min_length=1, max_length=20), ids: str = Query(""),
+                           years: int = Query(3, ge=1, le=10)) -> dict[str, Any]:
+        from src.alphadesk import chart_signals, profiles
+        from src.alphadesk.cache import get_cached, set_cached
+
+        wanted = [i.strip() for i in ids.split(",") if i.strip()][: chart_signals.MAX_STRATEGIES]
+        key = {"ids": ",".join(sorted(wanted)), "years": years, "profile": profiles.current_id() or "owner"}
+        try:
+            # Replays only change once a day; live trades and Kronos forecasts are cheap to re-read.
+            cached = get_cached("chart_signals", symbol, max_age_s=900, **key)
+            if cached is not None:
+                return {"ok": True, "data": cached, "cached": True}
+            data = chart_signals.signals(symbol, wanted, years)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        set_cached("chart_signals", symbol, data, **key)
+        return {"ok": True, "data": data, "cached": False}
+
+    @app.get("/api/desk/kronos/backfill", dependencies=[Depends(require_auth)])
+    def kronos_backfill_status() -> dict[str, Any]:
+        from src.alphadesk import kronos_log
+
+        return {"ok": True, "data": kronos_log.status()}
+
     @app.get("/api/desk/health", dependencies=[Depends(require_auth)])
     def get_health(profile: str | None = Query(None)) -> dict[str, Any]:
         from src.alphadesk import health
@@ -207,3 +241,8 @@ def register_strategies_routes(app: FastAPI, require_auth: AuthDep) -> None:
                 logging.getLogger(__name__).warning("start-up health check failed", exc_info=True)
 
         threading.Thread(target=first_check, daemon=True, name="health-first-check").start()
+
+    if os.environ.get("KRONOS_BACKFILL", os.environ.get("STRATEGY_SCHEDULER", os.environ.get("INTRADAY_SCHEDULER", ""))) == "1":
+        from src.alphadesk import kronos_log
+
+        kronos_log.start_backfill()  # past Kronos forecasts for the watchlist, outside market hours
