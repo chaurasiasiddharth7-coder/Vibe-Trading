@@ -150,6 +150,22 @@ endpoints:
 $EXTRA
 YAML
 
+if [ -s "$SECRETS/router_key" ]; then  # 9router (router_setup.sh) stays a model source when this file is rewritten
+  setenv ROUTER_API_KEY "$(cat "$SECRETS/router_key")"
+  cat >> librechat.yaml <<'YAML'
+    - name: "9router"
+      apiKey: "${ROUTER_API_KEY}"
+      baseURL: "http://9router:20128/v1"
+      models:
+        default: ["auto"]
+        fetch: true
+      titleConvo: true
+      titleModel: "current_model"
+      summarize: false
+      modelDisplayLabel: "9router"
+YAML
+fi
+
 cat > docker-compose.override.yml <<'YAML'
 # Written by deploy_chat.command: reachable only through Caddy (127.0.0.1), with our librechat.yaml.
 services:

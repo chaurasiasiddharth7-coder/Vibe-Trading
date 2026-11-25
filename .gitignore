@@ -108,3 +108,7 @@ profit_guard_test_result.txt
 scripts/.deploy_host
 scripts/pr/
 scripts/.chat_*_key
+
+# 9router on the VPS: provider keys (deleted after sending) and dashboard password
+scripts/.router_providers.txt
+scripts/.router_login
