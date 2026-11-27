@@ -1,8 +1,8 @@
 """Candidate options strategies for ``backtest.engines.options_portfolio``.
 
-Five ``OptionsSignalEngine`` implementations (see SKILL.md for the instruction
+Six ``OptionsSignalEngine`` implementations (see SKILL.md for the instruction
 format): covered call, cash-secured put, short iron condor, vol-gated short
-strangle and protective put. ``SignalEngine`` defaults to the iron condor.
+strangle, protective put and trend-filtered bull call spread. ``SignalEngine`` defaults to the iron condor.
 
 The engine calls ``generate`` once with the whole history, so trade management
 (profit targets, DTE exits, compounding size) is decided here by re-pricing
@@ -344,12 +344,149 @@ class ProtectivePutEngine(_StockPlusOption):
         super().__init__(delta=delta, dte=dte, roll_dte=roll_dte, **kw)
 
 
+class BullCallSpreadEngine(_OptionsBook):
+    """Bull call spread with a trend filter: buy an ITM call, sell an OTM call
+    on the same expiry, only while the underlying is in an uptrend.
+
+    Rebuild of the AlgoBulls Odyssey "Nifty 50 Bull Call Spread" (ABODSYM084)
+    with its two weak points changed:
+
+    - **Entry gate.** The original opens at a fixed time every day. Here a
+      spread opens only when ``close > EMA(ema_span)`` (``trend="ema"``);
+      ``trend="none"`` reproduces the always-on entry for comparison.
+    - **No short-leg stop by default.** The short OTM call loses value
+      exactly when the spread is winning, so a stop on it closes winners
+      early. Risk is already capped at the debit. ``short_leg_stop`` (e.g.
+      ``0.5`` = short call up 50% from entry) brings the original rule back
+      for A/B runs.
+
+    Exits: ``take_profit`` of the max profit (width minus debit),
+    ``stop_loss`` of the debit, or ``exit_dte`` calendar days before expiry.
+    After a losing exit, wait ``cooldown_after_loss`` bars before re-entering,
+    so a falling market can't stack one loss after another.
+
+    Daily bars only: the original trades 15-minute candles intraday, which
+    this engine can't model. Treat this as a test of the structure and the
+    filter, not of intraday timing.
+
+    ``expiry_weekday`` (Mon=0) picks the first listed weekly expiry at least
+    ``dte`` days out; ``None`` uses the first trading day ``dte`` days out.
+    ``lot_size`` rounds quantity down to whole lots (check the current NSE
+    lot size for NIFTY before trusting a run). Run with ``margin_enabled:
+    false``: the engine margins the short leg as naked, but the long ITM call
+    covers it.
+    """
+
+    def __init__(self, long_delta: float = 0.65, short_delta: float = 0.35,
+                 dte: int = 7, expiry_weekday: Optional[int] = None,
+                 trend: str = "ema", ema_span: int = 20,
+                 take_profit: Optional[float] = 0.6, stop_loss: Optional[float] = 0.5,
+                 exit_dte: Optional[int] = 1, short_leg_stop: Optional[float] = None,
+                 cooldown_after_loss: int = 2, risk_fraction: float = 0.05,
+                 lot_size: int = 1, **kw: Any) -> None:
+        super().__init__(**kw)
+        if not 0 < short_delta < long_delta < 1:
+            raise ValueError("need 0 < short_delta < long_delta < 1")
+        if trend not in {"ema", "none"}:
+            raise ValueError("trend must be 'ema' or 'none'")
+        self.long_delta, self.short_delta = long_delta, short_delta
+        self.dte, self.expiry_weekday = dte, expiry_weekday
+        self.trend, self.ema_span = trend, ema_span
+        self.take_profit, self.stop_loss, self.exit_dte = take_profit, stop_loss, exit_dte
+        self.short_leg_stop = short_leg_stop
+        self.cooldown_after_loss = cooldown_after_loss
+        self.risk_fraction, self.lot_size = risk_fraction, max(int(lot_size), 1)
+
+    def _expiry_for(self, index: pd.DatetimeIndex, i: int) -> Optional[str]:
+        if self.expiry_weekday is None:
+            return self._expiry(index, i, self.dte)
+        later = index[i + 1:]
+        hits = later[(later.weekday == self.expiry_weekday)
+                     & ((later - index[i]).days >= self.dte)]
+        return str(hits[0].date()) if len(hits) else None
+
+    def _gate(self, close: pd.Series, ema: pd.Series, i: int) -> bool:
+        if self.trend == "none":
+            return True
+        return i >= self.ema_span and float(close.iloc[i]) > float(ema.iloc[i])
+
+    def _run(self, code, close, hv, capital):
+        idx = close.index
+        ema = close.ewm(span=self.ema_span, adjust=False).mean()
+        out: List[Dict[str, Any]] = []
+        legs: Optional[List[Leg]] = None
+        cost = width = short_entry = 0.0
+        wait = 0
+        fee = lambda S, vol, ts, lgs: self.commission * sum(  # noqa: E731
+            abs(self._price(S, vol, ts, lg) * lg["qty"]) for lg in lgs)
+        for i, ts in enumerate(idx):
+            S, vol = float(close.iloc[i]), float(hv.iloc[i])
+            if legs is not None:
+                expiry = pd.Timestamp(legs[0]["expiry"])
+                if ts >= expiry:
+                    intrinsic = sum(max(0.0, S - lg["strike"]) * lg["qty"] for lg in legs)
+                    pnl = intrinsic - cost
+                    capital += pnl
+                    legs = None
+                    wait = self.cooldown_after_loss if pnl < 0 else 0
+                else:
+                    value = self._value(S, vol, ts, legs)
+                    pnl = value - cost
+                    short_now = self._price(S, vol, ts, legs[1])
+                    hit = (
+                        (self.take_profit is not None
+                         and pnl >= self.take_profit * (width - cost))
+                        or (self.stop_loss is not None and pnl <= -self.stop_loss * cost)
+                        or (self.short_leg_stop is not None and short_entry > 0
+                            and short_now >= (1 + self.short_leg_stop) * short_entry)
+                        or (self.exit_dte is not None
+                            and (expiry - ts).days <= self.exit_dte)
+                    )
+                    if hit:
+                        out.append(self._signal(ts, "close", code, legs))
+                        pnl -= fee(S, vol, ts, legs)
+                        capital += pnl
+                        legs = None
+                        wait = self.cooldown_after_loss if pnl < 0 else 0
+                        continue
+            if legs is not None or (self.start is not None and ts < self.start):
+                continue
+            if wait > 0:
+                wait -= 1
+                continue
+            if i + 1 >= len(idx) or not self._gate(close, ema, i):
+                continue
+            expiry = self._expiry_for(idx, i)
+            if expiry is None:
+                continue
+            k_long = self._strike(S, vol, ts, expiry, "call", self.long_delta)
+            k_short = self._strike(S, vol, ts, expiry, "call", self.short_delta)
+            if not k_long < k_short:
+                continue
+            unit = [{"type": "call", "strike": k_long, "expiry": expiry, "qty": 1},
+                    {"type": "call", "strike": k_short, "expiry": expiry, "qty": -1}]
+            debit = self._value(S, vol, ts, unit)
+            if debit <= 0:
+                continue
+            units = self.risk_fraction * max(capital, 0.0) / debit
+            qty = float(np.floor(units / self.lot_size) * self.lot_size)
+            if qty <= 0:
+                continue
+            legs = [dict(lg, qty=lg["qty"] * qty) for lg in unit]
+            cost = debit * qty + fee(S, vol, ts, legs)
+            width = (k_short - k_long) * qty
+            short_entry = self._price(S, vol, ts, unit[1])
+            out.append(self._signal(ts, "open", code, legs))
+        return out
+
+
 ENGINES: Dict[str, Callable[..., _OptionsBook]] = {
     "covered_call": CoveredCallEngine,
     "cash_secured_put": CashSecuredPutEngine,
     "iron_condor": IronCondorEngine,
     "vol_gated_strangle": VolGatedStrangleEngine,
     "protective_put": ProtectivePutEngine,
+    "bull_call_spread": BullCallSpreadEngine,
 }
 
 SignalEngine = IronCondorEngine
