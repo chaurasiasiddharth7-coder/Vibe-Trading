@@ -77,9 +77,10 @@ Iron Condor opening signal:
 ```
 
 Ready-made engines for covered call, cash-secured put, iron condor,
-vol-gated short strangle and protective put live in
-`example_signal_engine.py` next to this file. Backtest results and their
-caveats are in `docs/sessions/2026-10-09_options_strategy_candidates.md`.
+vol-gated short strangle, protective put and a trend-filtered bull call
+spread live in `example_signal_engine.py` next to this file. Backtest results
+and their caveats are in `docs/sessions/2026-10-09_options_strategy_candidates.md`
+and `docs/sessions/2026-11-27_nifty_bull_call_spread.md`.
 
 ## `config.json` Format
 
