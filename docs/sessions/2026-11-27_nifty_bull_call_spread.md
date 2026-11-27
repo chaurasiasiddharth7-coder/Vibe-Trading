@@ -26,8 +26,8 @@ Code: `BullCallSpreadEngine` in
   costs to -10% a year at 2% of premium per side. Every leg pays costs on the
   full premium of a deep ITM call, which is several times the spread's debit.
 - **Verdict: don't pay for the Odyssey strategy and don't move either version
-  to live.** At most, paper-trade the rebuild on Vibe-Trading's Strategies
-  page with the live switch locked, and drop it if it keeps bleeding.
+  to live.** The intraday rerun below (15-minute candles, like the original)
+  loses money every single year. Mark it as a failed strategy.
 
 ## Setup
 
@@ -91,3 +91,70 @@ Variants:
   actual NSE expiry weekday (Thursday until Aug 2025, Tuesday since). Lot
   sizes aren't modeled (`lot_size=1`).
 - One underlying, one parameter set, about 350 trades in total.
+
+
+## Intraday rerun (15-minute candles, like the original)
+
+Script: `agent/scripts/bull_call_spread_intraday.py`, run on NIFTY 1-minute
+candles (Apr 2017 → 27 Nov 2026). One lot (65) per trade, real NSE costs:
+₹20 + GST per order, 0.1% STT on sell premium, 0.0353% exchange fee and
+0.5 point slippage per leg per side. Weekly expiry on Thursday until Aug 2025,
+Tuesday after. Strikes ATM±100, up to 3 entries a day, net premium target/stop
+30% of the debit, day P&L tracker +₹3,000 / −₹2,000, exit by 15:15.
+`algobulls_*` versions enter at 09:30 every day. `filtered_*` versions need the
+15-minute close above its 20-EMA and the previous daily close above the
+20-day EMA. Those P&L thresholds are our guesses: on AlgoBulls you set them
+yourself.
+
+### Bottom line
+
+- **Every version loses every year**, in both periods, at every setting
+  tried. The AlgoBulls rules lose about ₹1.4 lakh a year per lot. The
+  filtered version loses about ₹60,000.
+- **Two reasons, both structural:**
+  1. **NIFTY has lost ground during market hours.** From 09:30 to 15:15
+     the index fell about 6,900 points in total over these 9.5 years. The
+     overnight gap plus the first 15 minutes gained about 20,100. A bullish
+     position opened at 09:30 and closed at 15:15 is on the wrong side of
+     that. This alone explains the roughly ₹20,000 a year per lot lost
+     before costs.
+  2. **Costs.** About ₹250 per round trip, times 3 to 10 trades a week, comes
+     to ₹40,000 to ₹1.2 lakh a year per lot. The short-leg stop makes it worse:
+     it fires on about 60% of trades (mostly *winning* ones, so the win rate
+     looks good at 62%) and each fire triggers a re-entry and another set of
+     costs.
+- The trend filter and dropping the short-leg stop roughly halve the loss.
+  They don't turn it positive.
+
+### 1 lot, 15-minute candles, real costs
+
+| Variant | Period | ₹/yr per lot | Return/yr on ₹2L | Max DD ₹ | Sharpe | Costs ₹/yr | Trades | Win rate | Green years | Exit mix |
+|---|---|---|---|---|---|---|---|---|---|---|
+| algobulls_style | 2017-2021 | -159,325 | -79.7% | -742,584 | -6.13 | 120,738 | 2339 | 61.1% | 0/5 | short_sl 61%, day_tracker 20%, time 11%, stop 7%, target 0% |
+| algobulls_style | 2022-2026 | -123,685 | -61.8% | -611,988 | -4.48 | 123,733 | 2460 | 62.9% | 0/5 | short_sl 59%, day_tracker 19%, time 14%, stop 7%, target 0% |
+| algobulls_style | Full | -140,935 | -70.5% | -1,345,310 | -5.26 | 122,168 | 4799 | 62.0% | 0/10 | short_sl 60%, day_tracker 20%, time 13%, stop 7%, target 0% |
+| filtered_no_short_sl | 2017-2021 | -72,366 | -36.2% | -341,287 | -4.10 | 42,873 | 830 | 42.2% | 0/5 | day_tracker 41%, time 35%, target 18%, stop 5% |
+| filtered_no_short_sl | 2022-2026 | -48,265 | -24.1% | -247,415 | -3.16 | 37,510 | 744 | 45.2% | 0/5 | day_tracker 39%, time 36%, target 19%, stop 5% |
+| filtered_no_short_sl | Full | -59,950 | -30.0% | -577,540 | -3.65 | 40,087 | 1574 | 43.6% | 0/10 | day_tracker 40%, time 36%, target 19%, stop 5% |
+| filtered_keep_short_sl | 2017-2021 | -93,055 | -46.5% | -433,911 | -6.37 | 68,142 | 1322 | 58.9% | 0/5 | short_sl 60%, day_tracker 19%, time 16%, stop 5%, target 0% |
+| filtered_keep_short_sl | 2022-2026 | -67,530 | -33.8% | -342,387 | -5.18 | 57,388 | 1144 | 60.5% | 0/5 | short_sl 55%, time 20%, day_tracker 18%, stop 6%, target 0% |
+| filtered_keep_short_sl | Full | -79,891 | -39.9% | -766,856 | -5.80 | 62,571 | 2466 | 59.6% | 0/10 | short_sl 58%, day_tracker 18%, time 18%, stop 6%, target 0% |
+| algobulls_no_short_sl | 2017-2021 | -120,066 | -60.0% | -559,407 | -3.84 | 77,186 | 1493 | 42.5% | 0/5 | day_tracker 45%, time 27%, target 21%, stop 8% |
+| algobulls_no_short_sl | 2022-2026 | -88,922 | -44.5% | -453,295 | -2.74 | 78,566 | 1557 | 45.0% | 0/5 | day_tracker 47%, time 27%, target 21%, stop 5% |
+| algobulls_no_short_sl | Full | -104,012 | -52.0% | -1,005,947 | -3.27 | 77,827 | 3050 | 43.8% | 0/10 | day_tracker 46%, time 27%, target 21%, stop 6% |
+
+### filtered_no_short_sl, full period, sensitivity
+
+| Test | ₹/yr per lot | Return/yr on ₹2L | Max DD ₹ | Sharpe | Costs ₹/yr | Trades | Win rate | Green years | Exit mix |
+|---|---|---|---|---|---|---|---|---|---|
+| strikes ±1 | -65,795 | -32.9% | -632,766 | -5.84 | 48,715 | 1944 | 40.0% | 0/10 | time 35%, stop 28%, target 24%, day_tracker 13% |
+| strikes ±4 | -58,126 | -29.1% | -579,368 | -2.90 | 34,771 | 1321 | 38.3% | 1/10 | day_tracker 77%, time 23%, target 0%, stop 0% |
+| 1 entry/day | -53,937 | -27.0% | -520,352 | -3.41 | 33,673 | 1319 | 41.9% | 0/10 | time 38%, day_tracker 37%, target 22%, stop 3% |
+| no day tracker | -75,420 | -37.7% | -728,539 | -3.45 | 47,769 | 1882 | 44.7% | 0/10 | time 43%, stop 32%, target 25% |
+| target/stop 50% | -53,700 | -26.8% | -517,822 | -3.19 | 33,948 | 1330 | 40.0% | 0/10 | day_tracker 52%, time 47%, target 1%, stop 0% |
+
+
+Caveat: options are still priced with Black-Scholes on 20-day realized vol,
+not real option prices. Real NIFTY options usually trade above realized vol,
+which would make buying the ITM leg cost more. That makes the result worse,
+not better.
